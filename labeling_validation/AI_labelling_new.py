@@ -5,6 +5,8 @@ import os
 import re
 import pandas as pd
 import random
+import openpyxl
+import json
 
 # uncomment the lines below for debugging:
 # import sys
@@ -176,12 +178,17 @@ def process_images(images):
 images = [file for file in os.listdir(image_folder) if file.lower().endswith(('.jpg', '.jpeg', '.png'))]
 #images = images[0:5]
 results_tree, results_two, responses = process_images(images)
-
+with open('data/validation sample/validation results/responses.json', 'w') as f:
+    for item in responses:
+        json.dump(item, f)
+        f.write('\n')
 
 labeling_outputs_tree = pd.DataFrame(results_tree)
-labeling_outputs_tree.to_excel(f'data/validation sample/validation results/temp_tree.xlsx', index=False)
+labeling_outputs_tree.to_excel('data/validation sample/validation results/temp_tree.xlsx', index=False)
+labeling_outputs_tree.to_csv('data/validation sample/validation results/temp_tree_csv.csv', index=False)
 
 labeling_outputs_two = pd.DataFrame(results_two)
-labeling_outputs_two.to_excel(f'data/validation sample/validation results/temp_two.xlsx', index=False)
+labeling_outputs_two.to_excel('data/validation sample/validation results/temp_two.xlsx', index=False)
+labeling_outputs_two.to_csv('data/validation sample/validation results/temp_two_csv.csv', index=False)
 
 # still lots of missing answers....
