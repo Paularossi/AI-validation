@@ -11,7 +11,7 @@ instructions_2 = (
     "You will be provided with detailed answers from a previous set of questions regarding an ad image. "
     "Based on this information, categorize the ad into one of the specified categories by providing a single number/letter (only one answer) per question. "
     "Use the answers provided for each subquestion to make your decision, and make sure you answer every question. "
-    "Write your final answer like this: *TYPE AD*: [answer] - [explanation]."
+    "Write your final answer like this: *TYPE AD*: [answer] - [explanation]. Every question must be answered."
 )
 
 # general question to check if the image is fitting for analysis

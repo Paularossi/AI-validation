@@ -5,7 +5,6 @@ import os
 import re
 import pandas as pd
 import random
-import openpyxl
 import json
 
 # uncomment the lines below for debugging:
@@ -84,10 +83,36 @@ def create_second_payload(first_prompt_answers):
     return second_payload
 
 
+def process_second_payload(first_prompt_answers):
+    second_payload = create_second_payload(first_prompt_answers)
+    response_2 = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=second_payload)
+    print(response_2.json())
+            
+    if response_2.status_code == 200:
+        answers_2 = response_2.json()['choices'][0]['message']['content']
+        answer_dict_2 = {match[0].strip(): (match[1].strip(), match[2].strip()) for match in PATTERN_PAYLOAD_OUTPUT.findall(answers_2)}
+            
+    # second, get the coding from the second prompt
+    type_ad, type_ad_expl = answer_dict_2.get("TYPE AD", ("-1", "Answer missing"))
+    marketing_str, marketing_str_expl = answer_dict_2.get("MARKETING STRATEGY", ("-1", "Answer missing"))
+    premium_offer, premium_offer_expl = answer_dict_2.get("PREMIUM OFFER", ("-1", "Answer missing"))
+    who_cat, who_cat_expl = answer_dict_2.get("WHO CATEGORY", ("-1", "Answer missing"))
+    processing, processing_expl = answer_dict_2.get("PROCESSING", ("-1", "Answer missing"))
+    healthy_living, healthy_living_expl = answer_dict_2.get("HEALTHY LIVING", ("-1", "Answer missing"))
+
+    # if there are missing values, just rerun the second prompt
+    if "-1" in [type_ad, marketing_str, premium_offer, who_cat, processing, healthy_living]:
+        print("Missing answers. Rerunning the second prompt...\n")
+        answer_dict_2 = process_second_payload(first_prompt_answers)
+    
+    return answer_dict_2
+
+
 def process_images(images):
     results_tree = [] # for the coding using the decision tree deduction
     results_two = [] # for the coding using two AI payloads
-    responses = []
+    responses_first_prompt = []
+    responses_second_prompt = []
 
     for image in images:
         print(f'======== Labeling image: {image}. ========\n')
@@ -99,18 +124,7 @@ def process_images(images):
             answers_1 = response_1.json()['choices'][0]['message']['content']
             answer_dict_1 = {match[0].strip(): (match[1].strip(), match[2].strip()) for match in PATTERN_PAYLOAD_OUTPUT.findall(answers_1)}
             
-            responses.append(answers_1)
-
-            # transform the answers from the first payload into input for the second one
-            first_prompt_answers = "; ".join([f"*{key}*: {value[0]} - {value[1]}" for key, value in answer_dict_1.items()])
-            
-            second_payload = create_second_payload(first_prompt_answers)
-            response_2 = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=second_payload)
-            print(response_2.json())
-            
-            if response_2.status_code == 200:
-                answers_2 = response_2.json()['choices'][0]['message']['content']
-                answer_dict_2 = {match[0].strip(): (match[1].strip(), match[2].strip()) for match in PATTERN_PAYLOAD_OUTPUT.findall(answers_2)}
+            responses_first_prompt.append(answer_dict_1)
             
             ad_id = AD_PATTERN.findall(image)[0][0]
             
@@ -139,14 +153,19 @@ def process_images(images):
                 "healthy_living_expl": q6_explanation
             }
             
-            # second, get the coding from the second prompt
+            # transform the answers from the first payload into input for the second one
+            first_prompt_answers = "; ".join([f"*{key}*: {value[0]} - {value[1]}" for key, value in answer_dict_1.items()])
+            
+            answer_dict_2 = process_second_payload(first_prompt_answers)
+            responses_second_prompt.append(answer_dict_2)
+            
             type_ad, type_ad_expl = answer_dict_2.get("TYPE AD", ("-1", "Answer missing"))
             marketing_str, marketing_str_expl = answer_dict_2.get("MARKETING STRATEGY", ("-1", "Answer missing"))
             premium_offer, premium_offer_expl = answer_dict_2.get("PREMIUM OFFER", ("-1", "Answer missing"))
             who_cat, who_cat_expl = answer_dict_2.get("WHO CATEGORY", ("-1", "Answer missing"))
             processing, processing_expl = answer_dict_2.get("PROCESSING", ("-1", "Answer missing"))
             healthy_living, healthy_living_expl = answer_dict_2.get("HEALTHY LIVING", ("-1", "Answer missing"))
-
+                
             dict_entry_two = {
                 "img_id": ad_id,
                 "type_ad": type_ad,
@@ -171,24 +190,25 @@ def process_images(images):
         results_tree.append(dict_entry_tree)
         results_two.append(dict_entry_two)
 
-    return results_tree, results_two, responses
+    return results_tree, results_two, responses_first_prompt, responses_second_prompt
 
 
 
 images = [file for file in os.listdir(image_folder) if file.lower().endswith(('.jpg', '.jpeg', '.png'))]
 #images = images[0:5]
-results_tree, results_two, responses = process_images(images)
-with open('data/validation sample/validation results/responses.json', 'w') as f:
-    for item in responses:
+results_tree, results_two, responses_first_prompt, responses_second_prompt = process_images(images)
+with open('data/validation sample/validation results/responses_second_prompt.json', 'w') as f:
+    for item in responses_second_prompt:
         json.dump(item, f)
         f.write('\n')
 
 labeling_outputs_tree = pd.DataFrame(results_tree)
-labeling_outputs_tree.to_excel('data/validation sample/validation results/temp_tree.xlsx', index=False)
+labeling_outputs_tree['img_id'] = labeling_outputs_tree['img_id'].astype(str)
+labeling_outputs_tree.info()
+#labeling_outputs_tree.to_excel('data/validation sample/validation results/temp_tree.xlsx', index=False)
 labeling_outputs_tree.to_csv('data/validation sample/validation results/temp_tree_csv.csv', index=False)
 
 labeling_outputs_two = pd.DataFrame(results_two)
-labeling_outputs_two.to_excel('data/validation sample/validation results/temp_two.xlsx', index=False)
+labeling_outputs_two['img_id'] = labeling_outputs_two['img_id'].astype(str)
+#labeling_outputs_two.to_excel('data/validation sample/validation results/temp_two.xlsx', index=False)
 labeling_outputs_two.to_csv('data/validation sample/validation results/temp_two_csv.csv', index=False)
-
-# still lots of missing answers....

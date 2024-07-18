@@ -4,6 +4,14 @@ library(tidyr)
 library(ggplot2)
 library(writexl)
 library(irr)  
+library(readr)
+
+# find the ids of the images in the folder
+all_files  <- list.files('data/validation sample/')
+image_names <- all_files[grepl("\\.jpg$|\\.png$", all_files)]
+image_names <- sub("\\.jpg$|\\.png$", "", image_names)
+image_names_df <- data.frame(img_id = as.character(image_names), stringsAsFactors = FALSE)
+write.csv(image_names_df, "data/validation sample/validation results/img_names.csv", row.names = FALSE)
 
 ### LOTS OF DATA PROCESSING
 ### FIRST, FOR THE ORIGINAL CODING
@@ -29,42 +37,30 @@ original_labeling <- coding %>%
     mutate(across(everything(), as.character))
 head(original_labeling)
 
-# select the 35 images
-AI_labeling <- read_excel("data/validation sample/validation results/labeling_outputs_new.xlsx")
-head(AI_labeling, 2)
+matched_rows <- original_labeling %>% filter(img_id %in% image_names)
 
-original_labeling <- original_labeling %>%
-    semi_join(AI_labeling, by = "img_id")
+# missing images
+image_names[!image_names %in% matched_rows$img_id]
+write_xlsx(matched_rows, "data/validation sample/validation results/originaltemp.xlsx")
 
-# find the images with extra entries
-unique_entries <- original_labeling %>%
-    group_by(img_id) %>%
-    summarise(count = n()) %>%
-    filter(count == 1)
+org <- read_excel("data/validation sample/validation results/original.xlsx")
+matched2 <- org %>% filter(img_id %in% image_names)
+image_names[!image_names %in% org$img_id]
 
-# for multiple entries
-mlt_entries <- original_labeling %>%
-    group_by(img_id) %>%
-    summarise(count = n()) %>%
-    filter(count > 1)
 
-mlt_entries <- original_labeling %>%
-    filter(img_id %in% mlt_entries$img_id)
 
-# image with id 1661251238333 has 4 duplicate entries
-# image with id 1669283492983 takes the first entry
-# for ids 1666263595546, 1666263595546 just pick one (out of two) at random
+
+
+# START ANALYSIS HERE
+original_labeling <- read_excel("data/validation sample/validation results/original.xlsx")
 
 # standardize empty strings to NA
 standardize_missing <- function(column) {
-    column <- ifelse(column == "", "0", column)
+    column <- ifelse(is.na(column) | column == "", "0", column)
     return(column)
 }
 
-# aggregate the unique img_ids (31 in total) + the 4 de-duplicated entries
 original_labeling <- original_labeling %>%
-    filter(img_id %in% unique_entries$img_id) %>%
-    rbind(mlt_entries[c(1,3,8,9),]) %>%
     mutate(across(c(marketing_str, prem_offer), standardize_missing))
 # this is the processed original labeling data
 write_xlsx(original_labeling, "data/validation sample/validation results/original.xlsx")
@@ -74,19 +70,53 @@ missing_values_count <- original_labeling %>%
   summarise(across(everything(), ~ sum(is.na(.)))) %>%
   pivot_longer(everything(), names_to = "question", values_to = "missing_count")
 
-### LOAD ALL THE AI-LABELLED DATA
-ai_files <- list(
-  "data/validation sample/validation results/labeling_outputs_new.xlsx"
-  # "data/validation sample/validation results/labeling_outputs2.xlsx",
-  # "data/validation sample/validation results/labeling_outputs3.xlsx",
-  # "data/validation sample/validation results/labeling_outputs4.xlsx",
-  # "data/validation sample/validation results/labeling_outputs5.xlsx"
-)
+### LOAD THE AI-LABELLED DATA
+ai_data_tree <- read_csv("data/validation sample/validation results/temp_tree_csv.csv",
+                col_types = cols(.default = col_character()))
+ai_data_two <- read_csv("data/validation sample/validation results/temp_two_csv.csv",
+                col_types = cols(.default = col_character()))
 
-ai_data <- lapply(ai_files, read_excel)
-names(AI_labeling)
+names(ai_data_tree)
 
 ### START PERFORMANCE COMPARISON HERE
+
+type_ad_test <- kappa2(cbind(as.numeric(original_labeling$type_ad), as.numeric(ai_data_tree$type_ad)))
+prem_offer_test <- kappa2(cbind(as.numeric(original_labeling$prem_offer), as.numeric(ai_data_tree$prem_offer)))
+marketing_str_test <- kappa2(cbind(as.numeric(original_labeling$marketing_str), as.numeric(ai_data_tree$marketing_str)))
+who_cat_test <- kappa2(cbind(as.numeric(original_labeling$who_cat), as.numeric(ai_data_tree$who_cat)))
+processed_test <- kappa2(cbind(as.numeric(original_labeling$processed), as.numeric(ai_data_tree$processed)))
+healthy_test <- kappa2(cbind(as.numeric(original_labeling$healthy_living), as.numeric(ai_data_tree$healthy_living)))
+
+cat("***TYPE AD*** Kappa Value:", type_ad_test$value, "; p-value:", type_ad_test$p.value, " \n")
+cat("***PREMIUM OFFER*** Kappa Value:", prem_offer_test$value, "; p-value:", prem_offer_test$p.value, " \n")
+cat("***MARKETING STR*** Kappa Value:", marketing_str_test$value, "; p-value:", marketing_str_test$p.value, " \n")
+cat("***WHO CATEGORY*** Kappa Value:", who_cat_test$value, "; p-value:", who_cat_test$p.value, " \n")
+cat("***PROCESSED*** Kappa Value:", processed_test$value, "; p-value:", processed_test$p.value, " \n")
+cat("***HEALTHY LIVING*** Kappa Value:", healthy_test$value, "; p-value:", healthy_test$p.value, " \n")
+
+
+table(original_labeling$who_cat, ai_data_tree$who_cat)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+"""
 columns_to_compare <- c("type_ad", "marketing_str", "prem_offer", "who_cat", "processed", "healthy_living")
 
 # compare AI and original coding and calculate accuracy
@@ -121,17 +151,6 @@ accuracy_df <- bind_rows(lapply(seq_along(accuracy_list), function(i) {
   df
 }), .id = "iteration")
 
-
-kappa2(cbind(as.numeric(original_labeling$type_ad), as.numeric(AI_labeling$type_ad)))
-kappa2(cbind(as.numeric(original_labeling$prem_offer), as.numeric(AI_labeling$prem_offer)))
-kappa2(cbind(as.numeric(original_labeling$marketing_str), as.numeric(AI_labeling$marketing_str)))
-kappa2(cbind(as.numeric(original_labeling$who_cat), as.numeric(AI_labeling$who_cat)))
-kappa2(cbind(as.numeric(original_labeling$processed), as.numeric(AI_labeling$processed)))
-kappa2(cbind(as.numeric(original_labeling$healthy_living), as.numeric(AI_labeling$healthy_living)))
-
-length(AI_labeling$type_ad)
-
-table(original_labeling$who_cat, AI_labeling$who_cat)
 
 # calculate overall accuracy
 overall_accuracy <- accuracy_df %>%
@@ -296,3 +315,4 @@ nrow(filtered_data)
 min(na.omit(filtered_data$ad_delivery_stop_time))
 
 write_xlsx(filtered_data, "output/Belgium/ads_data/Belgium_data_Dec1.xlsx")
+"""
