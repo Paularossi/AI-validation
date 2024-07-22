@@ -460,7 +460,7 @@ type_ad = (
     "10 = infant formula, follow-up and growing up milks"
 )
 
-promo_character = (
+marketing_str = (
     "MARKETING STRATEGY: Choose just the number of the marketing strategy used in this ad: "
     "0 = No marketing strategy used "
     "1 = Cartoon/Company owned character e.g. M&Ms "

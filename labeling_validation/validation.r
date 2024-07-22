@@ -5,14 +5,16 @@ library(ggplot2)
 library(writexl)
 library(irr)  
 library(readr)
+library(caret)
 
 # find the ids of the images in the folder
 all_files  <- list.files('data/validation sample/')
 image_names <- all_files[grepl("\\.jpg$|\\.png$", all_files)]
 image_names <- sub("\\.jpg$|\\.png$", "", image_names)
-image_names_df <- data.frame(img_id = as.character(image_names), stringsAsFactors = FALSE)
-write.csv(image_names_df, "data/validation sample/validation results/img_names.csv", row.names = FALSE)
+#image_names_df <- data.frame(img_id = as.character(image_names), stringsAsFactors = FALSE)
+#write.csv(image_names_df, "data/validation sample/validation results/img_names.csv", row.names = FALSE)
 
+"""
 ### LOTS OF DATA PROCESSING
 ### FIRST, FOR THE ORIGINAL CODING
 coding <- read.csv("data/Voedingsadvertenties_finaal.csv", sep = ";")
@@ -49,8 +51,6 @@ image_names[!image_names %in% org$img_id]
 
 
 
-
-
 # START ANALYSIS HERE
 original_labeling <- read_excel("data/validation sample/validation results/original.xlsx")
 
@@ -69,95 +69,115 @@ write_xlsx(original_labeling, "data/validation sample/validation results/origina
 missing_values_count <- original_labeling %>%
   summarise(across(everything(), ~ sum(is.na(.)))) %>%
   pivot_longer(everything(), names_to = "question", values_to = "missing_count")
+"""
 
+
+
+original_labeling <- read_excel("data/validation sample/validation results/original.xlsx")
 ### LOAD THE AI-LABELLED DATA
-ai_data_tree <- read_csv("data/validation sample/validation results/temp_tree_csv.csv",
-                col_types = cols(.default = col_character()))
-ai_data_two <- read_csv("data/validation sample/validation results/temp_two_csv.csv",
-                col_types = cols(.default = col_character()))
+ai_data_tree <- read_excel("data/validation sample/validation results/temp_tree.xlsx")
+ai_data_two <- read_excel("data/validation sample/validation results/temp_two.xlsx")
 
 names(ai_data_tree)
 
-### START PERFORMANCE COMPARISON HERE
+### START COMPARISON HERE
 
-type_ad_test <- kappa2(cbind(as.numeric(original_labeling$type_ad), as.numeric(ai_data_tree$type_ad)))
-prem_offer_test <- kappa2(cbind(as.numeric(original_labeling$prem_offer), as.numeric(ai_data_tree$prem_offer)))
-marketing_str_test <- kappa2(cbind(as.numeric(original_labeling$marketing_str), as.numeric(ai_data_tree$marketing_str)))
-who_cat_test <- kappa2(cbind(as.numeric(original_labeling$who_cat), as.numeric(ai_data_tree$who_cat)))
-processed_test <- kappa2(cbind(as.numeric(original_labeling$processed), as.numeric(ai_data_tree$processed)))
-healthy_test <- kappa2(cbind(as.numeric(original_labeling$healthy_living), as.numeric(ai_data_tree$healthy_living)))
+# type_ad_test <- kappa2(cbind(as.numeric(original_labeling$type_ad), as.numeric(ai_data_two$type_ad)))
+
+table(original_labeling$type_ad, ai_data_tree$type_ad)
+table(original_labeling$who_cat, ai_data_tree$who_cat)
+
+# in case we need to convert to factor
+type_ad_levels <- unique(c(as.character(original_labeling$type_ad), as.character(ai_data_two$type_ad)))
+marketing_str_levels <- unique(c(as.character(original_labeling$marketing_str), as.character(ai_data_two$marketing_str)))
+prem_offer_levels <- unique(c(as.character(original_labeling$prem_offer), as.character(ai_data_two$prem_offer)))
+who_cat_levels <- unique(c(as.character(original_labeling$who_cat), as.character(ai_data_two$who_cat)))
+processed_levels <- unique(c(as.character(original_labeling$processed), as.character(ai_data_two$processed)))
+healthy_living_levels <- unique(c(as.character(original_labeling$healthy_living), as.character(ai_data_two$healthy_living)))
+#type_ad_levels <- as.character(1:10)
+#marketing_str_levels <- c("0", "1", "2", "3", "4", "5", "6", "7", "8a", "8b", "9", "10", "11")
+#prem_offer_levels <- as.character(0:10)
+#who_cat_levels <- c("1", "2", "3a", "3b", "4a", "4b", "4c", "4d", "4e", "5", "6", "7", "8", "9", "10", 
+#                    "11", "12", "13", "14", "15", "16", "17", "A", "NA", "ND")
+#processed_levels <- c("1", "2", "3", "4", "5", "NA")
+#healthy_living_levels <- c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "A", "ND")
+
+
+type_ad_test <- kappa2(cbind(original_labeling$type_ad, ai_data_two$type_ad))
+marketing_str_test <- kappa2(cbind(original_labeling$marketing_str, ai_data_two$marketing_str))
+prem_offer_test <- kappa2(cbind(original_labeling$prem_offer, ai_data_two$prem_offer))
+who_cat_test <- kappa2(cbind(original_labeling$who_cat, ai_data_two$who_cat))
+processed_test <- kappa2(cbind(original_labeling$processed, ai_data_two$processed))
+healthy_test <- kappa2(cbind(original_labeling$healthy_living, ai_data_two$healthy_living))
 
 cat("***TYPE AD*** Kappa Value:", type_ad_test$value, "; p-value:", type_ad_test$p.value, " \n")
-cat("***PREMIUM OFFER*** Kappa Value:", prem_offer_test$value, "; p-value:", prem_offer_test$p.value, " \n")
 cat("***MARKETING STR*** Kappa Value:", marketing_str_test$value, "; p-value:", marketing_str_test$p.value, " \n")
+cat("***PREMIUM OFFER*** Kappa Value:", prem_offer_test$value, "; p-value:", prem_offer_test$p.value, " \n")
 cat("***WHO CATEGORY*** Kappa Value:", who_cat_test$value, "; p-value:", who_cat_test$p.value, " \n")
 cat("***PROCESSED*** Kappa Value:", processed_test$value, "; p-value:", processed_test$p.value, " \n")
 cat("***HEALTHY LIVING*** Kappa Value:", healthy_test$value, "; p-value:", healthy_test$p.value, " \n")
 
-
-table(original_labeling$who_cat, ai_data_tree$who_cat)
-
-
-
-
-
-
-
+# look at the tables:
+table(original_labeling$type_ad, ai_data_two$type_ad)
+table(original_labeling$marketing_str, ai_data_two$marketing_str)
+table(original_labeling$prem_offer, ai_data_two$prem_offer)
+table(original_labeling$who_cat, ai_data_two$who_cat)
+table(original_labeling$processed, ai_data_two$processed)
+table(original_labeling$healthy_living, ai_data_two$healthy_living)
 
 
-
-
-
-
-
-
-
-
-
-
-
-"""
 columns_to_compare <- c("type_ad", "marketing_str", "prem_offer", "who_cat", "processed", "healthy_living")
 
 # compare AI and original coding and calculate accuracy
-compare_columns <- function(df, column) {
-    original_col <- df[[paste0(column, "_original")]]
-    ai_col <- df[[paste0(column, "_AI")]]
+calculate_metrics <- function(original, predicted, column_name) {
+  correct_predictions <- sum(original == predicted, na.rm = TRUE)
+  accuracy <- correct_predictions / length(original) # or na.omit(original) ?
+  
+  combined_levels <- union(levels(factor(original)), levels(factor(predicted)))
+  original_factor <- factor(original, levels = combined_levels)
+  predicted_factor <- factor(predicted, levels = combined_levels)
+  conf_matrix <- confusionMatrix(data = predicted_factor, reference = original_factor)
 
-    valid_indices <- !is.na(original_col)
-
-    match_col <- original_col[valid_indices] == ai_col[valid_indices]
-    accuracy <- sum(match_col, na.rm = TRUE) / length(match_col)
-    return(accuracy)
+  kappa_test <- kappa2(cbind(original, predicted))
+  
+  list(column = column_name, accuracy = accuracy, detailed_metrics = conf_matrix, kappa = kappa_test)
 }
 
-#accuracy_results <- sapply(columns_to_compare, compare_columns, df = comparison)
-# calculate aggregate accuracy
-#aggregate_score <- mean(accuracy_results, na.rm = TRUE)
-
-# merge original data with AI labeling data for each iteration and calculate accuracy
-accuracy_list <- lapply(ai_data, function(ai_df) {
-  comparison <- original_labeling %>%
-    inner_join(ai_df, by = "img_id", suffix = c("_original", "_AI"))
-  
-  accuracy_results <- sapply(columns_to_compare, compare_columns, df = comparison)
-  accuracy_results
+# loop through the columns and calculate various metrics
+results <- lapply(columns_to_compare, function(col) {
+  original_col <- original_labeling[[col]]
+  predicted_col <- ai_data_two[[col]]
+  calculate_metrics(original_col, predicted_col, col)
 })
 
-# combine all accuracies
-accuracy_df <- bind_rows(lapply(seq_along(accuracy_list), function(i) {
-  df <- as.data.frame(t(accuracy_list[[i]]))
-  df$iteration <- i
-  df
-}), .id = "iteration")
+for (result in results) {
+  cat("\n ======================================================================= \n")
+  cat("Column:", result$column, "\n")
+  cat("Accuracy:", result$accuracy, "\n")
+  cat("\nDetailed Metrics:\n")
+  print(result$detailed_metrics)
+  cat("\n--------------------------------\n")
+  print(result$kappa)
+}
 
 
-# calculate overall accuracy
-overall_accuracy <- accuracy_df %>%
-  summarise(across(where(is.numeric), \(x) mean(x, na.rm = TRUE)))
+# plot the accuracies
+accuracy_df <- data.frame(
+  Column = sapply(results, function(x) x$column),
+  Accuracy = sapply(results, function(x) x$accuracy),
+  Kappa = sapply(results, function(x) x$kappa)
+)
 
-# reshape for plotting
-accuracy_long <- pivot_longer(accuracy_df, cols = -iteration, names_to = "question", values_to = "accuracy")
+ggplot(accuracy_df, aes(x = Column, y = Accuracy)) +
+  geom_bar(stat = "identity", fill = "purple") +
+  geom_text(aes(label = round(Accuracy, 2)), vjust = -0.5, size = 5) +
+  theme_minimal() +
+  labs(title = "Accuracy by Question", x = "Question", y = "Accuracy") +
+  ylim(0, 1) 
+
+
+# RESUME HERE WITH PLOTTING THE KAPPA
+"""
 
 # show individual accuracy per iteration per question
 p1 <- ggplot(accuracy_long, aes(x = question, y = accuracy, fill = as.factor(iteration))) +
