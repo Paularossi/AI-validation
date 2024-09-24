@@ -1,3 +1,17 @@
+# first check if the ad is suitable for analysis
+instructions_intro = (
+    "You will be provided with an image. Your task is to determine whether the image contains an advertisement suitable for analysis. "
+    "Provide a single answer for each question: Yes/No or the brand name, followed by a short explanation. "
+    "Write your answers like this: *IS AN AD*: [answer] - [explanation]; *BRAND*: [answer] - [explanation], separating the answers with semicolons. "
+    "If the image is not an advertisement, explain why. Regardless of your answer to the first question, identify and provide any visible brand name or logo. If no brand is visible, explain why. "
+    "Ensure the explanation includes the key visual features that led to your conclusion."
+)
+
+questions_intro = [
+    ("IS AN AD", "Does the image contain an advertisement (e.g., promotional content or product images) that is suitable for further analysis?"),
+    ("BRAND", "Can you identify any visible brand name or logo in the image? If so, please provide just the brand name or a brief description of the logo.")
+]
+
 instructions_1 = (
     "You will be provided with a picture of an advertisement. "
     "You need to answer the questions by providing a single number/letter (only one answer) per question, along with a short explanation for the answer. "
@@ -6,6 +20,8 @@ instructions_1 = (
     "Ensure that each answer includes a brief explanation of the features in the image that led to your choice. "
     "If the questions is not relevant, do not provide an explanation, just write the answer like this: *TYPE OF STRATEGY*: -1 - NOT RELEVANT."
 )
+# add another question about the brand presence in the image (and include in the validation)
+# pick the pictures where there is a food/drink product
 
 instructions_2 = (
     "You will be provided with detailed answers from a previous set of questions regarding an ad image. "
@@ -28,7 +44,8 @@ sub_questions_q1 = [
 ]
 
 sub_questions_q2 = [
-    ("MARKETING STRATEGY USED", "Is there a marketing strategy used in this ad? \n0 = No marketing strategy used \n1 = Yes, there is a marketing strategy used"),
+    ("MARKETING STRATEGY USED", "Is there a marketing strategy used in this ad? \n0 = No marketing strategy used \n1 = Yes, there is a marketing strategy used"
+                                "Note that having random people in an ad is not a marketing strategy, and price-related promotions do not fit here."),
     ("TYPE OF STRATEGY", "What type of marketing strategy is used? \n1 = Cartoon/Company owned character (e.g., Shrek) \n2 = Licensed character (e.g., Dora the Explorer) \n3 = Person (sportsperson, celebrity, etc.) \n4 = Event or historical/festival \n5 = For specific groups (kids, students) \n6 = Awards \n7 = Other"),
     ("CARTOON OR COMPANY OWNED", "Specify the type: \n1 = Cartoon/Company owned character (e.g., M&Ms) \n2 = Movie/cartoon character "),
     ("PERSON STRATEGY", "Specify the type: \n1 = Amateur sportsperson \n2 = Celebrity (non-sports) \n3 = Famous sportsperson/team"),
@@ -54,7 +71,9 @@ sub_questions_q4 = [
 
 sub_questions_q5 = [
     ("PROCESSING LEVEL", "How processed is the food in the image? \n1 = Unprocessed or minimally processed \n2 = Processed \n3 = Alcohol \n4 = Non applicable"),
-    ("TYPE OF PROCESSING", "Specify the level of processing: \n1 = Processed culinary ingredients \n2 = Processed food \n3 = Ultra-processed food")
+    ("TYPE OF PROCESSING", "Specify the level of processing: \n1 = Processed culinary ingredients (e.g. oils, butter, honey, etc.) \n2 = Processed food \n3 = Ultra-processed food"
+                        "Processed food: Products made by adding salt, oil, sugar or other culinary ingredients to unprocessed or minimally processed foods, using preservation methods such as canning and bottling (e.g, canned vegetables, salted nuts, freshly made bread).\n\n"
+                        "Ultra-processed food: Formulations of industrial ingredients, resulting from a series of industrial processes such as frying, chemical modifications, application of additives, etc. (e.g., soft drinks, packaged snacks, ice-cream, pizza, burgers).")
 ]
 
 sub_questions_q6 = [
@@ -65,6 +84,131 @@ sub_questions_q6 = [
     ("OUTSIDE_TRIANGLE_NON_APPLICABLE", "Specify the type: \n1 = Nutrition outside the triangle \n2 = Alcohol \n3 = Non applicable company brand with no foods and drinks")
 ]
     
+
+# original questions:
+type_ad = (
+    "TYPE AD: Choose the number that best represents the type of ad in the image: "
+    "1 = food or drink product- food company/brand "
+    "2 = food or drink product- promoted in advertisement by non-food brand/company/retailer /service/event " 
+    "3 = food or drink company or brand (no retailer) without food or drink product "
+    "4 = food or drink retailer (supermarket or convenience store) with food or drink product "
+    "5 = food or drink retailer (supermarket or convenience store) without food or drink product "
+    "6 = food or drink retailer (restaurant or takeaway or fast food) with food or drink product "
+    "7 = food or drink retailer (restaurant or takeaway or fast food) without food or drink product "
+    "8 = non-food or drink product "
+    "9 = alcohol "
+    "10 = infant formula, follow-up and growing up milks"
+)
+
+marketing_str = (
+    "MARKETING STRATEGY: Choose just the number of the marketing strategy used in this ad. "
+    "Only if none of the 10 options fit, choose 11:"
+    "0 = No marketing strategy used "
+    "1 = Cartoon/Company owned character e.g. M&Ms "
+    "2 = Licensed character e.g. Dora the explorer  "
+    "3 = Amateur sportsperson e.g. person playing a sport "
+    "4 = Celebrity (non-sports) e.g. Jamie Oliver "
+    "5 = Movie/cartoon character e.g. Shrek "
+    "6 = Famous sportsperson/team "
+    "7 = Non-sports/historical events/festivals e.g. Christmas "
+    "8a = ‘For kids’ e.g. image of a child, ‘great for school lunches’ "
+    "8b = 'For students' "
+    "9 = Awards e.g. Best Food Award 2014 "
+    "10 = Sports event "
+    "11 = Other "
+)
+
+# premium offers
+premium_offer = ( 
+    "PREMIUM OFFER: Choose just the number of the premium offer type in this ad: "
+    "0 = No premium offer used"
+    "1 = Game and app downloads "
+    "2 = Contests "
+    "3 = Pay 2 take 3, or similar "
+    "4 = 20%% extra, or similar "
+    "5 = Limited edition "
+    "6 = Social charity "
+    "7 = Gift or collectable "
+    "8 = Price discount "
+    "9 = Loyalty programs "
+    "10 = Other "
+)
+
+# food product category - not very useful for fast-food, more for snacks
+who_cat = (
+    "WHO CATEGORY: Categorize the ad into one of these product categories: "
+    "1 = Chocolate and sugar confectionery "
+    "2 = Cakes and pastries "
+    "3a = Savoury snacks (including salted nuts) "
+    "3b = Unsalted nuts "
+    "4a = Juices "
+    "4b = Milk drinks "
+    "4c = Energy drinks "
+    "4d = Other beverages (Soft drinks, sweetened beverages) "
+    "4e = Waters, tea and coffee (unsweetened) "
+    "5 = Edible ices "
+    "6 = Breakfast cereals "	
+    "7 = Yoghurts, sour milk, cream, etc. "
+    "8 = Cheese "
+    "9 = Ready-made and convenience foods and composite dishes "
+    "10 = Butter and other fats and oils "
+    "11 = Bread, bread products and crisp breads "
+    "12 = Fresh or dried pasta, rice and grains "
+    "13 = Fresh and frozen meat, poultry, fish and similar +eggs "
+    "14 = Processed meat, poultry, fish and similar "
+    "15 = Fresh and frozen fruit, vegetables and legumes "
+    "16 = Processed fruit, vegetables and legumes "
+    "17 = Sauces, dips and dressings "
+    "A = Alcohol "
+    "NA. Non applicable company brand with no foods and drinks "
+    "NS. Non-specified "
+)
+
+processed = (
+    "PROCESSING: How processed is the food in the image? "
+    "1 = unprocessed or minimally processed food "
+    "2 = processed culinary ingredients "
+    "3 = processed food "
+    "4 = ultra-processed food "
+    "5 = alcohol "
+    "NA = Non applicable"
+)
+
+healthy_living = (
+    "HEALTHY LIVING: Categorize the ad into one of these healthy living categories: "
+    "1 = Drinks "
+    "2 = Vegetables "
+    "3 = Fruits "
+    "4 = Bread, whole grain products and potatoes "
+    "5 = Nuts and seeds "
+    "6 = Legumes "	
+    "7 = Oils and fats "
+    "8 = Eggs "
+    "9 = Cheese "
+    "10 = Milk and alternatives "
+    "11 = Fish "
+    "12 = Meat "
+    "13 = Nutrition outside the triangle "
+    "A = Alcohol "
+    "NA. Non applicable company brand with no foods and drinks "
+)
+
+
+def get_intro_answer(answer_dict):
+    is_ad, is_ad_expl = answer_dict.get("IS AN AD", ("-1", "Answer missing"))
+    if is_ad == "No":  # not an ad
+        is_ad_answer = "0"
+    elif is_ad == "Yes":
+        is_ad_answer = "1"
+    else:
+        is_ad_answer = "-1"
+    
+    return is_ad_answer, is_ad_expl
+
+
+def get_brand_answer(answer_dict):
+    brand, brand_expl = answer_dict.get("BRAND", ("-1", "Answer missing"))
+
 
 def get_q1_answer(answer_dict):
     
@@ -443,112 +587,3 @@ def get_q6_answer(answer_dict):
         explanation = "Answer missing or ambiguous."
 
     return type_ad_answer, explanation
-
-
-# original questions:
-type_ad = (
-    "TYPE AD: Choose the number that best represents the type of ad in the image: "
-    "1 = food or drink product- food company/brand "
-    "2 = food or drink product- promoted in advertisement by non-food brand/company/retailer /service/event " 
-    "3 = food or drink company or brand (no retailer) without food or drink product "
-    "4 = food or drink retailer (supermarket or convenience store) with food or drink product "
-    "5 = food or drink retailer (supermarket or convenience store) without food or drink product "
-    "6 = food or drink retailer (restaurant or takeaway or fast food) with food or drink product "
-    "7 = food or drink retailer (restaurant or takeaway or fast food) without food or drink product "
-    "8 = non-food or drink product "
-    "9 = alcohol "
-    "10 = infant formula, follow-up and growing up milks"
-)
-
-marketing_str = (
-    "MARKETING STRATEGY: Choose just the number of the marketing strategy used in this ad: "
-    "0 = No marketing strategy used "
-    "1 = Cartoon/Company owned character e.g. M&Ms "
-    "2 = Licensed character e.g. Dora the explorer  "
-    "3 = Amateur sportsperson e.g. person playing a sport "
-    "4 = Celebrity (non-sports) e.g. Jamie Oliver "
-    "5 = Movie/cartoon character e.g. Shrek "
-    "6 = Famous sportsperson/team "
-    "7 = Non-sports/historical events/festivals e.g. Christmas "
-    "8a = ‘For kids’ e.g. image of a child, ‘great for school lunches’ "
-    "8b = 'For students' "
-    "9 = Awards e.g. Best Food Award 2014 "
-    "10 = Sports event "
-    "11 = Other "
-)
-
-# premium offers
-premium_offer = ( 
-    "PREMIUM OFFER: Choose just the number of the premium offer type in this ad: "
-    "0 = No premium offer used"
-    "1 = Game and app downloads "
-    "2 = Contests "
-    "3 = Pay 2 take 3, or similar "
-    "4 = 20%% extra, or similar "
-    "5 = Limited edition "
-    "6 = Social charity "
-    "7 = Gift or collectable "
-    "8 = Price discount "
-    "9 = Loyalty programs "
-    "10 = Other "
-)
-
-# food product category - not very useful for fast-food, more for snacks
-who_cat = (
-    "WHO CATEGORY: Categorize the ad into one of these product categories: "
-    "1 = Chocolate and sugar confectionery "
-    "2 = Cakes and pastries "
-    "3a = Savoury snacks (including salted nuts) "
-    "3b = Unsalted nuts "
-    "4a = Juices "
-    "4b = Milk drinks "
-    "4c = Energy drinks "
-    "4d = Other beverages (Soft drinks, sweetened beverages) "
-    "4e = Waters, tea and coffee (unsweetened) "
-    "5 = Edible ices "
-    "6 = Breakfast cereals "	
-    "7 = Yoghurts, sour milk, cream, etc. "
-    "8 = Cheese "
-    "9 = Ready-made and convenience foods and composite dishes "
-    "10 = Butter and other fats and oils "
-    "11 = Bread, bread products and crisp breads "
-    "12 = Fresh or dried pasta, rice and grains "
-    "13 = Fresh and frozen meat, poultry, fish and similar +eggs "
-    "14 = Processed meat, poultry, fish and similar "
-    "15 = Fresh and frozen fruit, vegetables and legumes "
-    "16 = Processed fruit, vegetables and legumes "
-    "17 = Sauces, dips and dressings "
-    "A = Alcohol "
-    "NA. Non applicable company brand with no foods and drinks "
-    "NS. Non-specified "
-)
-
-processed = (
-    "PROCESSING: How processed is the food in the image? "
-    "1 = unprocessed or minimally processed food "
-    "2 = processed culinary ingredients "
-    "3 = processed food "
-    "4 = ultra-processed food "
-    "5 = alcohol "
-    "NA = Non applicable"
-)
-
-healthy_living = (
-    "HEALTHY LIVING: Categorize the ad into one of these healthy living categories: "
-    "1 = Drinks "
-    "2 = Vegetables "
-    "3 = Fruits "
-    "4 = Bread, whole grain products and potatoes "
-    "5 = Nuts and seeds "
-    "6 = Legumes "	
-    "7 = Oils and fats "
-    "8 = Eggs "
-    "9 = Cheese "
-    "10 = Milk and alternatives "
-    "11 = Fish "
-    "12 = Meat "
-    "13 = Nutrition outside the triangle "
-    "A = Alcohol "
-    "NA. Non applicable company brand with no foods and drinks "
-)
-
