@@ -35,6 +35,7 @@ instructions_2 = (
 
 sub_questions_q1 = [
     ("FOOD OR DRINK", "Is the ad related to a food or drink product? \n1 = Yes \n2 = No"),
+    ("ALCOHOL CHECK", "Does the ad contain an alcoholic beverage or alcohol brand? \n1 = Yes \n2 = No"),
     ("TYPE OF PRODUCT SOURCE", "If yes, is the product from a food company/brand, retailer, or restaurant? \n1 = Food company/brand \n2 = Retailer \n3 = Restaurant or takeaway"),
     ("FOOD COMPANY PROMOTION", "If food company/brand, is it promoting a specific product or just the brand? \n1 = Specific product \n2 = Just the brand"),
     ("RETAILER TYPE", "If retailer, is it a supermarket/convenience store or another type of retailer? \n1 = Supermarket or convenience store \n2 = Other type of retailer"),
@@ -96,7 +97,7 @@ type_ad = (
     "6 = food or drink retailer (restaurant or takeaway or fast food) with food or drink product "
     "7 = food or drink retailer (restaurant or takeaway or fast food) without food or drink product "
     "8 = non-food or drink product "
-    "9 = alcohol "
+    "9 = alcoholic product/brand "
     "10 = infant formula, follow-up and growing up milks"
 )
 
@@ -206,14 +207,11 @@ def get_intro_answer(answer_dict):
     return is_ad_answer, is_ad_expl
 
 
-def get_brand_answer(answer_dict):
-    brand, brand_expl = answer_dict.get("BRAND", ("-1", "Answer missing"))
-
-
 def get_q1_answer(answer_dict):
     
     # default "-1" for missing data
     food_or_drink, food_or_drink_expl = answer_dict.get("FOOD OR DRINK", ("-1", "Answer missing"))
+    alcohol_check, alcohol_check_expl = answer_dict.get("ALCOHOL CHECK", ("-1", "Answer missing"))
     product_source, product_source_expl = answer_dict.get("TYPE OF PRODUCT SOURCE", ("-1", "Answer missing"))
     food_company_promotion, food_company_promotion_expl = answer_dict.get("FOOD COMPANY PROMOTION", ("-1", "Answer missing"))
     retailer_type, retailer_type_expl = answer_dict.get("RETAILER TYPE", ("-1", "Answer missing"))
@@ -223,6 +221,13 @@ def get_q1_answer(answer_dict):
 
 
     explanation = "" # to bind the explanation together
+    
+    # Alcohol check
+    if alcohol_check == "1":  # Alcohol
+        type_ad_answer = "9"
+        explanation += " " + alcohol_check_expl
+        return type_ad_answer, explanation
+    
     if food_or_drink == "1":  # Yes, it is related to food or drink
         explanation += food_or_drink_expl
         if product_source == "1":  # Food company/brand
@@ -273,9 +278,6 @@ def get_q1_answer(answer_dict):
         explanation += " " + food_or_drink_expl
         if non_food_or_drink == "1":  # non-food or drink product
             type_ad_answer = "8"
-            explanation += " " + non_food_or_drink_expl
-        elif non_food_or_drink == "2":  # alcohol
-            type_ad_answer = "9"
             explanation += " " + non_food_or_drink_expl
         elif non_food_or_drink == "3":  # infant formula
             type_ad_answer = "10"

@@ -6,7 +6,7 @@ import re
 import pandas as pd
 import random
 import json
-import openpyxl
+
 
 # uncomment the lines below for debugging:
 # import sys
@@ -242,6 +242,7 @@ def process_images(images):
                             #"healthy_living": healthy_living,
                             #"healthy_living_expl": healthy_living_expl
                         }
+                        
                     except Exception as e:
                         print(f"Error processing the second prompt: {e}.")
                         dict_entry_two = {"img_id": ad_id}
@@ -275,30 +276,26 @@ def process_images(images):
 
 
 images = [file for file in os.listdir(image_folder) if file.lower().endswith(('.jpg', '.jpeg', '.png'))]
-#images = images[0:5]
-labeling_outputs_intro, responses_intro, labeling_outputs_tree, labeling_outputs_two, responses_first_prompt, responses_second_prompt = process_images(images)
-with open('data/validation sample/validation results/responses_second_prompt.json', 'w') as f:
-    for item in responses_second_prompt:
-        json.dump(item, f)
-        f.write('\n')
+# randomly sample 100 images for a little analysis
+sampled_images = random.sample(images, 10)
 
-labeling_outputs_tree.info()
+labeling_outputs_intro, responses_intro, labeling_outputs_tree, labeling_outputs_two, responses_first_prompt, responses_second_prompt = process_images(sampled_images)
 
 merged_intro_tree = labeling_outputs_intro.merge(labeling_outputs_tree, on='img_id', how='left')
 merged_intro_two = labeling_outputs_intro.merge(labeling_outputs_two, on='img_id', how='left')
 
 # save the merged dataframes
-merged_intro_tree.to_excel('validation results/temp_intro_tree.xlsx', index=False)
-merged_intro_two.to_excel('validation results/temp_intro_two.xlsx', index=False)
+merged_intro_tree.to_excel('validation results/temp_intro_tree3.xlsx', index=False)
+merged_intro_two.to_excel('validation results/temp_intro_two3.xlsx', index=False)
+
+
+image=sampled_images[9]
 
 
 
 
-
-
-
-### DO THIS ONLY ONCE
-# load all outside ads
+######## DO THIS ONLY ONCE
+""" # load all outside ads
 import shutil
 outside_path = "data/outside ads all"
 all_path = "data/outside ads"
@@ -317,3 +314,24 @@ for folder_name in os.listdir(outside_path):
                 print(f"Copied {file_name} to {all_path}")
 
 print(f"Done copying {len(os.listdir(all_path))} images.")
+
+# keep only the images for the cleaned coding data
+import os
+import pandas as pd
+
+img_ids = pd.read_excel("validation results/original_coding.xlsx")['img_id'].astype(str)
+img_id_set = set(img_ids)
+
+image_folder = 'data/outside ads'
+
+# cleanup images in the folder
+for image_file in os.listdir(image_folder):
+    img_id_from_file = os.path.splitext(image_file)[0]
+    
+    # if the image file name is not in the img_id_set remove it
+    if img_id_from_file not in img_id_set:
+        os.remove(os.path.join(image_folder, image_file))
+        print(f"Removed: {image_file}")
+
+print("Folder cleanup complete.") """
+###########################

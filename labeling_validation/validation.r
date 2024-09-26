@@ -3,85 +3,105 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(writexl)
-library(irr)  
+library(irr)
 library(readr)
 library(caret)
 
+
 # find the ids of the images in the folder
-all_files  <- list.files('data/validation sample/')
-image_names <- all_files[grepl("\\.jpg$|\\.png$", all_files)]
-image_names <- sub("\\.jpg$|\\.png$", "", image_names)
+#all_files  <- list.files('data/validation sample/')
+#image_names <- all_files[grepl("\\.jpg$|\\.png$", all_files)]
+#image_names <- sub("\\.jpg$|\\.png$", "", image_names)
 #image_names_df <- data.frame(img_id = as.character(image_names), stringsAsFactors = FALSE)
 #write.csv(image_names_df, "data/validation sample/validation results/img_names.csv", row.names = FALSE)
 
-"""
+
 ### LOTS OF DATA PROCESSING
 ### FIRST, FOR THE ORIGINAL CODING
-coding <- read.csv("data/Voedingsadvertenties_finaal.csv", sep = ";")
-coding <- coding[ , -c(1, 3:22)] # remove the columns we don't need
-coding <- as_tibble(coding)
-head(coding, 2)
-names(coding)
+root_folder <- "//unimaas.nl/users/Employees/P70090005/data/Desktop/phd/ad libraries and brands/AI-validation/"
+# coding <- read.csv(paste(root_folder, "data/Voedingsadvertenties_finaal.csv", sep=""), sep = ";")
+# coding <- coding[ , -c(1, 3:22)] # remove the columns we don't need
+# coding <- as_tibble(coding)
+# head(coding, 2)
+# names(coding)
+# 
+# # first rename the columns
+# new_names <- c("img_id", "type_ad", "public_transport", "marketing_str", "marketing_str_descr", "prem_offer", "premium_descr",
+#                 "nr_food", "food_name", "brand_name", "who_cat", "processed", "healthy_living", "health_recomm", "comments")
+# names(coding) <- new_names
+# head(coding, 2)
+# 
+# # then adjust the img ids
+# coding <- coding %>%
+#     mutate(img_id = gsub(".jpg", "", img_id))
+# 
+# # select the relevant columns
+# original_labeling <- coding %>% 
+#     select(img_id, type_ad, marketing_str, prem_offer, who_cat, processed, healthy_living) %>%
+#     mutate(across(everything(), as.character))
+# head(original_labeling)
+# 
+# cleaned_labeling <- original_labeling %>%
+#   # first remove all rows with more than 2 NAs
+#   filter(rowSums(is.na(across(everything()))) <= 2) %>%
+#   group_by(img_id) %>%
+#   filter(if (n() > 1) {
+#     if (n_distinct(across(everything())) == 1) {
+#       row_number() == 1 # if all rows are the same, keep only one row
+#     } else {
+#       na_counts <- rowSums(is.na(across(everything())))
+#       # check if NA counts are identical for all rows and if rows are different
+#       if (n_distinct(na_counts) == 1) {
+#         # if all rows have the same number of NAs and are different, remove them
+#         FALSE
+#       } else {
+#         # otherwise, keep the row with the fewest NAs
+#         row_number() == which.min(na_counts)
+#       }
+#     }
+#   } else {
+#     TRUE # if there is only one row, keep it
+#   }) %>%
+#   ungroup()
+# 
+# # standardize empty strings to NA
+# standardize_missing <- function(column) {
+#   column <- ifelse(is.na(column) | column == "", "0", column)
+#   return(column)
+# }
+# 
+# cleaned_labeling <- cleaned_labeling %>%
+#   mutate(across(c(marketing_str, prem_offer), standardize_missing))
+# 
+# # save the cleaned data
+# write_xlsx(cleaned_labeling, paste(root_folder, "validation results/original_coding.xlsx", sep=""))
 
-# first rename the columns
-new_names <- c("img_id", "type_ad", "public_transport", "marketing_str", "marketing_str_descr", "prem_offer", "premium_descr",
-                "nr_food", "food_name", "brand_name", "who_cat", "processed", "healthy_living", "health_recomm", "comments")
-names(coding) <- new_names
-head(coding, 2)
-
-# then adjust the img ids
-coding <- coding %>%
-    mutate(img_id = gsub(".jpg", "", img_id))
-
-# select the relevant columns
-original_labeling <- coding %>% 
-    select(img_id, type_ad, marketing_str, prem_offer, who_cat, processed, healthy_living) %>%
-    mutate(across(everything(), as.character))
-head(original_labeling)
-
-matched_rows <- original_labeling %>% filter(img_id %in% image_names)
-
-# missing images
-image_names[!image_names %in% matched_rows$img_id]
-write_xlsx(matched_rows, "data/validation sample/validation results/originaltemp.xlsx")
-
-org <- read_excel("data/validation sample/validation results/original.xlsx")
-matched2 <- org %>% filter(img_id %in% image_names)
-image_names[!image_names %in% org$img_id]
 
 
 
-# START ANALYSIS HERE
-original_labeling <- read_excel("data/validation sample/validation results/original.xlsx")
-
-# standardize empty strings to NA
-standardize_missing <- function(column) {
-    column <- ifelse(is.na(column) | column == "", "0", column)
-    return(column)
-}
-
-original_labeling <- original_labeling %>%
-    mutate(across(c(marketing_str, prem_offer), standardize_missing))
-# this is the processed original labeling data
-write_xlsx(original_labeling, "data/validation sample/validation results/original.xlsx")
+###### START ANALYSIS HERE
+original_labeling <- read_excel(paste(root_folder, "validation results/original_coding.xlsx", sep=""))
 
 # check the number of missing entries
 missing_values_count <- original_labeling %>%
   summarise(across(everything(), ~ sum(is.na(.)))) %>%
   pivot_longer(everything(), names_to = "question", values_to = "missing_count")
-"""
 
 
+#matched_rows <- original_labeling %>% filter(img_id %in% image_names)
 
-original_labeling <- read_excel("data/validation sample/validation results/original.xlsx")
 ### LOAD THE AI-LABELLED DATA
-ai_data_tree <- read_excel("data/validation sample/validation results/temp_tree.xlsx")
-ai_data_two <- read_excel("data/validation sample/validation results/temp_two.xlsx")
+ai_data_tree <- read_excel(paste(root_folder, "validation results/temp_intro_tree2.xlsx", sep=""))
+ai_data_two <- read_excel(paste(root_folder, "validation results/temp_intro_two2.xlsx", sep=""))
 
-names(ai_data_tree)
+names(ai_data_two)
 
 ### START COMPARISON HERE
+ai_data_tree <- ai_data_tree[!is.na(ai_data_tree$type_ad), ]
+original_labeling <- original_labeling[original_labeling$img_id %in% ai_data_tree$img_id, ]
+ai_data_tree <- ai_data_tree[ai_data_tree$img_id %in% original_labeling$img_id, ]
 
+ai_data_two <- ai_data_two[ai_data_two$img_id %in% original_labeling$img_id, ]
 # type_ad_test <- kappa2(cbind(as.numeric(original_labeling$type_ad), as.numeric(ai_data_two$type_ad)))
 
 table(original_labeling$type_ad, ai_data_tree$type_ad)
@@ -93,7 +113,7 @@ marketing_str_levels <- unique(c(as.character(original_labeling$marketing_str), 
 prem_offer_levels <- unique(c(as.character(original_labeling$prem_offer), as.character(ai_data_two$prem_offer)))
 who_cat_levels <- unique(c(as.character(original_labeling$who_cat), as.character(ai_data_two$who_cat)))
 processed_levels <- unique(c(as.character(original_labeling$processed), as.character(ai_data_two$processed)))
-healthy_living_levels <- unique(c(as.character(original_labeling$healthy_living), as.character(ai_data_two$healthy_living)))
+#healthy_living_levels <- unique(c(as.character(original_labeling$healthy_living), as.character(ai_data_two$healthy_living)))
 #type_ad_levels <- as.character(1:10)
 #marketing_str_levels <- c("0", "1", "2", "3", "4", "5", "6", "7", "8a", "8b", "9", "10", "11")
 #prem_offer_levels <- as.character(0:10)
@@ -108,14 +128,14 @@ marketing_str_test <- kappa2(cbind(original_labeling$marketing_str, ai_data_two$
 prem_offer_test <- kappa2(cbind(original_labeling$prem_offer, ai_data_two$prem_offer))
 who_cat_test <- kappa2(cbind(original_labeling$who_cat, ai_data_two$who_cat))
 processed_test <- kappa2(cbind(original_labeling$processed, ai_data_two$processed))
-healthy_test <- kappa2(cbind(original_labeling$healthy_living, ai_data_two$healthy_living))
+#healthy_test <- kappa2(cbind(original_labeling$healthy_living, ai_data_two$healthy_living))
 
 cat("***TYPE AD*** Kappa Value:", type_ad_test$value, "; p-value:", type_ad_test$p.value, " \n")
 cat("***MARKETING STR*** Kappa Value:", marketing_str_test$value, "; p-value:", marketing_str_test$p.value, " \n")
 cat("***PREMIUM OFFER*** Kappa Value:", prem_offer_test$value, "; p-value:", prem_offer_test$p.value, " \n")
 cat("***WHO CATEGORY*** Kappa Value:", who_cat_test$value, "; p-value:", who_cat_test$p.value, " \n")
 cat("***PROCESSED*** Kappa Value:", processed_test$value, "; p-value:", processed_test$p.value, " \n")
-cat("***HEALTHY LIVING*** Kappa Value:", healthy_test$value, "; p-value:", healthy_test$p.value, " \n")
+#cat("***HEALTHY LIVING*** Kappa Value:", healthy_test$value, "; p-value:", healthy_test$p.value, " \n")
 
 # look at the tables:
 table(original_labeling$type_ad, ai_data_two$type_ad)
@@ -123,7 +143,7 @@ table(original_labeling$marketing_str, ai_data_two$marketing_str)
 table(original_labeling$prem_offer, ai_data_two$prem_offer)
 table(original_labeling$who_cat, ai_data_two$who_cat)
 table(original_labeling$processed, ai_data_two$processed)
-table(original_labeling$healthy_living, ai_data_two$healthy_living)
+#table(original_labeling$healthy_living, ai_data_two$healthy_living)
 
 
 columns_to_compare <- c("type_ad", "marketing_str", "prem_offer", "who_cat", "processed", "healthy_living")
@@ -177,7 +197,7 @@ ggplot(accuracy_df, aes(x = Column, y = Accuracy)) +
 
 
 # RESUME HERE WITH PLOTTING THE KAPPA
-"""
+
 
 # show individual accuracy per iteration per question
 p1 <- ggplot(accuracy_long, aes(x = question, y = accuracy, fill = as.factor(iteration))) +
