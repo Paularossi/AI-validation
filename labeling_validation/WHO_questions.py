@@ -1,6 +1,6 @@
 # first check if the ad is suitable for analysis
 instructions_intro = (
-    "You will be provided with an image. Your task is to determine whether the image contains an advertisement suitable for analysis. "
+    "You will be provided with an image. Your task is to determine whether the image contains an advertisement suitable for analysis.  "
     "Provide a single answer for each question: Yes/No or the brand name, followed by a short explanation. "
     "Write your answers like this: *IS AN AD*: [answer] - [explanation]; *BRAND*: [answer] - [explanation], separating the answers with semicolons. "
     "If the image is not an advertisement, explain why. Regardless of your answer to the first question, identify and provide any visible brand name or logo. If no brand is visible, explain why. "
@@ -20,8 +20,15 @@ instructions_1 = (
     "Ensure that each answer includes a brief explanation of the features in the image that led to your choice. "
     "If the questions is not relevant, do not provide an explanation, just write the answer like this: *TYPE OF STRATEGY*: -1 - NOT RELEVANT."
 )
-# add another question about the brand presence in the image (and include in the validation)
-# pick the pictures where there is a food/drink product
+
+instructions_1_text = (
+    "You will be provided with a picture of an advertisement and its corresponding text, either in English, French or Dutch. "
+    "You need to answer the questions by providing a single number/letter (only one answer) per question, along with a short explanation for the answer. "
+    "Write your answers like this: *FOOD OR DRINK*: [answer] - [explanation]; *TYPE OF PRODUCT SOURCE*: [answer] - [explanation]; and so on. "
+    "If a question is not relevant based on a previous answer, you should write -1 for the answer and 'NOT RELEVANT' for the explanation, but every question must be answered. "
+    "Ensure that each answer includes a brief explanation of the features in the image/text that led to your choice. "
+    "If the questions is not relevant, do not provide an explanation, just write the answer like this: *TYPE OF STRATEGY*: -1 - NOT RELEVANT."
+)
 
 instructions_2 = (
     "You will be provided with detailed answers from a previous set of questions regarding an ad image. "
@@ -44,10 +51,11 @@ sub_questions_q1 = [
     ("NON-FOOD OR DRINK", "If no, is the ad related to a non-food or drink product, alcohol, or infant formula? \n1 = Non-food or drink product \n2 = Alcohol \n3 = Infant formula")
 ]
 
+# remove amateur sportsperson..?
 sub_questions_q2 = [
     ("MARKETING STRATEGY USED", "Is there a marketing strategy used in this ad? \n0 = No marketing strategy used \n1 = Yes, there is a marketing strategy used"
                                 "Note that having random people in an ad is not a marketing strategy, and price-related promotions do not fit here."),
-    ("TYPE OF STRATEGY", "What type of marketing strategy is used? \n1 = Cartoon/Company owned character (e.g., Shrek) \n2 = Licensed character (e.g., Dora the Explorer) \n3 = Person (sportsperson, celebrity, etc.) \n4 = Event or historical/festival \n5 = For specific groups (kids, students) \n6 = Awards \n7 = Other"),
+    ("TYPE OF STRATEGY", "What type of marketing strategy is used? \n1 = Cartoon/Company owned character (e.g., Shrek) \n2 = Licensed character (e.g., Dora the Explorer) \n3 = Person (sportsperson, celebrity, etc.) \n4 = Event or historical/festival \n5 = For specific groups (kids, students) \n6 = Awards \n7 = None of the above"),
     ("CARTOON OR COMPANY OWNED", "Specify the type: \n1 = Cartoon/Company owned character (e.g., M&Ms) \n2 = Movie/cartoon character "),
     ("PERSON STRATEGY", "Specify the type: \n1 = Amateur sportsperson \n2 = Celebrity (non-sports) \n3 = Famous sportsperson/team"),
     ("EVENT STRATEGY", "Specify the type: \n1 = Non-sports/historical events/festivals (e.g., Christmas) \n2 = Sports event"),
@@ -56,7 +64,7 @@ sub_questions_q2 = [
 
 sub_questions_q3 = [
     ("PREMIUM OFFER USED", "Is there a premium offer used in this ad? \n0 = No premium offer used \n1 = Yes, there is a premium offer used"),
-    ("TYPE OF OFFER", "What type of premium offer is used? \n1 = Digital Offers \n2 = Promotions \n3 = Special Editions \n4 = Social Charity \n5 = Gifts or Collectables \n6 = Price or Loyalty Incentives \7 = Other"),
+    ("TYPE OF OFFER", "What type of premium offer is used? \n1 = Digital Offers \n2 = Promotions \n3 = Special Editions \n4 = Social Charity \n5 = Gifts or Collectables \n6 = Price or Loyalty Incentives \7 = None of the above"),
     ("DIGITAL OFFERS", "Specify the type: \n1 = Game and app downloads \n2 = Contests"),
     ("PROMOTIONS", "Specify the type: \n1 = Pay 2 take 3, or similar \n2 = 20%% extra, or similar"),
     ("PRICE OR LOYALTY INCENTIVES", "Specify the type: \n1 = Price discount \n2 = Loyalty programs")
@@ -64,7 +72,7 @@ sub_questions_q3 = [
 
 sub_questions_q4 = [
     ("INITIAL WHO CATEGORY", "Is the product a type of: \n1 = Confectionery, Baked Goods, or Snack \n2 = Drink or Dairy Product \n3 = Grain, Meat, or Vegetable \n4 = Ready-made and convenience foods \n5 = Alcoholic, Non-Applicable or Non-Specified"),
-    ("CONFECTIONERY BAKED SNACK", "Specify the type: \n1 = Chocolate and sugar confectionery \n2 = Cakes and pastries \n3 = Savoury snacks (including salted nuts) \n4 = Unsalted nuts"),
+    ("CONFECTIONERY BAKED SNACK", "Specify the type: \n1 = Chocolate and sugar confectionery \n2 = Cakes and pastries \n3 = Savoury snacks "),
     ("BEVERAGE DAIRY", "Specify the type: \n1 = Juices \n2 = Milk drinks \n3 = Energy drinks \n4 = Other beverages (Soft drinks, sweetened beverages) \n5 = Waters, tea, and coffee (unsweetened) \n6 = Edible ices \n7 = Yoghurts, sour milk, cream, etc. \n8 = Cheese"),
     ("GRAIN MEAT VEGETABLE", "Specify the type: \n1 = Breakfast cereals \n2 = Butter and other fats and oils \n3 = Bread, bread products, and crisp breads \n4 = Fresh or dried pasta, rice, and grains \n5 = Fresh and frozen meat, poultry, fish, and similar +eggs \n6 = Processed meat, poultry, fish, and similar \n7 = Fresh and frozen fruit, vegetables, and legumes \n8 = Processed fruit, vegetables, and legumes \n9 = Sauces, dips, and dressings"),
     ("ALCOHOL NONSPECIFIED", "Specify the type: \n1 = Alcohol \n2 = Non applicable company brand with no foods and drinks")
@@ -75,14 +83,6 @@ sub_questions_q5 = [
     ("TYPE OF PROCESSING", "Specify the level of processing: \n1 = Processed culinary ingredients (e.g. oils, butter, honey, etc.) \n2 = Processed food \n3 = Ultra-processed food"
                         "Processed food: Products made by adding salt, oil, sugar or other culinary ingredients to unprocessed or minimally processed foods, using preservation methods such as canning and bottling (e.g, canned vegetables, salted nuts, freshly made bread).\n\n"
                         "Ultra-processed food: Formulations of industrial ingredients, resulting from a series of industrial processes such as frying, chemical modifications, application of additives, etc. (e.g., soft drinks, packaged snacks, ice-cream, pizza, burgers).")
-]
-
-sub_questions_q6 = [
-    ("INITIAL CATEGORY", "Categorize the product broadly: \n1 = Drink or Dairy Product \n2 = Vegetable, Fruit, or Legume \n3 = Grain, Nut, or Meat \n4 = Outside the Healthy Living Triangle or Non-applicable"),
-    ("DRINK DAIRY", "Specify the type: \n1 = Drinks \n2 = Milk and alternatives \n3 = Cheese"),
-    ("VEGETABLE FRUIT LEGUME", "Specify the type: \n1 = Vegetables \n2 = Fruits \n3 = Legumes"),
-    ("GRAIN NUT MEAT", "Specify the type: \n1 = Bread, whole grain products and potatoes \n2 = Nuts and seeds \n3 = Eggs \n4 = Fish \n5 = Meat \n6 = Oils and fats"),
-    ("OUTSIDE_TRIANGLE_NON_APPLICABLE", "Specify the type: \n1 = Nutrition outside the triangle \n2 = Alcohol \n3 = Non applicable company brand with no foods and drinks")
 ]
     
 
@@ -103,7 +103,7 @@ type_ad = (
 
 marketing_str = (
     "MARKETING STRATEGY: Choose just the number of the marketing strategy used in this ad. "
-    "Only if none of the 10 options fit, choose 11:"
+    "Only if none of the 10 options fit, choose 0: "
     "0 = No marketing strategy used "
     "1 = Cartoon/Company owned character e.g. M&Ms "
     "2 = Licensed character e.g. Dora the explorer  "
@@ -116,12 +116,12 @@ marketing_str = (
     "8b = 'For students' "
     "9 = Awards e.g. Best Food Award 2014 "
     "10 = Sports event "
-    "11 = Other "
 )
 
 # premium offers
 premium_offer = ( 
     "PREMIUM OFFER: Choose just the number of the premium offer type in this ad: "
+    "Only if none of the 9 options fit, choose 0: "
     "0 = No premium offer used"
     "1 = Game and app downloads "
     "2 = Contests "
@@ -132,7 +132,6 @@ premium_offer = (
     "7 = Gift or collectable "
     "8 = Price discount "
     "9 = Loyalty programs "
-    "10 = Other "
 )
 
 # food product category - not very useful for fast-food, more for snacks
@@ -140,8 +139,7 @@ who_cat = (
     "WHO CATEGORY: Categorize the ad into one of these product categories: "
     "1 = Chocolate and sugar confectionery "
     "2 = Cakes and pastries "
-    "3a = Savoury snacks (including salted nuts) "
-    "3b = Unsalted nuts "
+    "3 = Savoury snacks "
     "4a = Juices "
     "4b = Milk drinks "
     "4c = Energy drinks "
@@ -156,9 +154,9 @@ who_cat = (
     "11 = Bread, bread products and crisp breads "
     "12 = Fresh or dried pasta, rice and grains "
     "13 = Fresh and frozen meat, poultry, fish and similar +eggs "
-    "14 = Processed meat, poultry, fish and similar "
+    "14 = Processed meat, poultry, fish and similar (e.g. sausages, smoked fish, etc.) "
     "15 = Fresh and frozen fruit, vegetables and legumes "
-    "16 = Processed fruit, vegetables and legumes "
+    "16 = Processed fruit, vegetables and legumes (e.g. tinned, dried, etc.)"
     "17 = Sauces, dips and dressings "
     "A = Alcohol "
     "NA. Non applicable company brand with no foods and drinks "
@@ -167,31 +165,12 @@ who_cat = (
 
 processed = (
     "PROCESSING: How processed is the food in the image? "
-    "1 = unprocessed or minimally processed food "
-    "2 = processed culinary ingredients "
-    "3 = processed food "
-    "4 = ultra-processed food "
+    "1 = ultra-processed food "
+    "2 = unprocessed or minimally processed food "
+    "3 = processed culinary ingredients "
+    "4 = processed food "
     "5 = alcohol "
     "NA = Non applicable"
-)
-
-healthy_living = (
-    "HEALTHY LIVING: Categorize the ad into one of these healthy living categories: "
-    "1 = Drinks "
-    "2 = Vegetables "
-    "3 = Fruits "
-    "4 = Bread, whole grain products and potatoes "
-    "5 = Nuts and seeds "
-    "6 = Legumes "	
-    "7 = Oils and fats "
-    "8 = Eggs "
-    "9 = Cheese "
-    "10 = Milk and alternatives "
-    "11 = Fish "
-    "12 = Meat "
-    "13 = Nutrition outside the triangle "
-    "A = Alcohol "
-    "NA. Non applicable company brand with no foods and drinks "
 )
 
 
@@ -321,7 +300,7 @@ def get_q2_answer(answer_dict):
             elif person_strategy == "3": # Famous sportsperson/team
                 type_ad_answer = "6"
             else:
-                type_ad_answer = "11" # set as 'Other'
+                type_ad_answer = "0" # set as None
                 explanation += " Other."
         elif type_of_strategy == "4":  # Event or historical/festival
             event_strategy, event_strategy_expl = answer_dict.get("EVENT STRATEGY", ("-1", "Answer missing."))
@@ -331,7 +310,7 @@ def get_q2_answer(answer_dict):
             elif event_strategy == "2": # Sports event
                 type_ad_answer = "10"
             else:
-                type_ad_answer = "11" # set as 'Other'
+                type_ad_answer = "0" # set as None
                 explanation += " Other."
         elif type_of_strategy == "5":  # For specific groups (kids, students)
             specific_groups, specific_groups_expl = answer_dict.get("SPECIFIC GROUPS", ("-1", "Answer missing."))
@@ -341,18 +320,18 @@ def get_q2_answer(answer_dict):
             elif specific_groups == "2": # Students
                 type_ad_answer = "8b"
             else:
-                type_ad_answer = "11"
+                type_ad_answer = "0"
                 explanation += " Other."
         elif type_of_strategy == "6":  # Awards
             type_ad_answer = "9"
             explanation += " Awards (e.g., Best Food Award 2014)."
         elif type_of_strategy == "7":  # Other
-            type_ad_answer = "11"
+            type_ad_answer = "0"
         else:
             type_ad_answer = "-1"
             explanation += " Answer missing."
     else:
-        type_ad_answer = 0
+        type_ad_answer = "0"
 
     return type_ad_answer, explanation
 
@@ -373,7 +352,7 @@ def get_q3_answer(answer_dict):
             elif digital_offers == "2": # Contests
                 type_ad_answer = "2"
             else:
-                type_ad_answer = "10" # set as 'Other'
+                type_ad_answer = "0" # set as None
                 explanation += " Other."
         elif type_of_offer == "2":  # Promotions
             promotions, promotions_expl = answer_dict.get("PROMOTIONS", ("-1", "Answer missing."))
@@ -383,7 +362,7 @@ def get_q3_answer(answer_dict):
             elif promotions == "2": # 20% off
                 type_ad_answer = "4"
             else:
-                type_ad_answer = "10"
+                type_ad_answer = "0"
                 explanation += " Other."
         elif type_of_offer == "3":  # Special Editions
             type_ad_answer = "5"
@@ -400,10 +379,10 @@ def get_q3_answer(answer_dict):
             elif price_or_loyalty_incentives == "2": # Loyalty programs
                 type_ad_answer = "9"
             else:
-                type_ad_answer = "10"
+                type_ad_answer = "0"
                 explanation += " Other."
         elif type_of_offer == "7":  # Other
-            type_ad_answer = "10"
+            type_ad_answer = "0"
         else:
             type_ad_answer = "-1"
             explanation += " Answer missing."
@@ -425,9 +404,7 @@ def get_q4_answer(answer_dict):
         elif confectionery_baked_snack == "2": # Cakes
             type_ad_answer = "2"
         elif confectionery_baked_snack == "3": # Savoury snacks
-            type_ad_answer = "3a"
-        elif confectionery_baked_snack == "4": # Unsalted nuts
-            type_ad_answer = "3b"
+            type_ad_answer = "3"
         else: 
             type_ad_answer = "-1"
             explanation += " Answer missing."
@@ -501,91 +478,26 @@ def get_q5_answer(answer_dict):
     explanation = initial_processing_level_expl
 
     if initial_processing_level == "1":  # Unprocessed or minimally processed food
-        type_ad_answer = "1"
+        type_ad_answer = "2"
         #explanation += " Unprocessed or minimally processed food."
     elif initial_processing_level == "2":  # Processed
         type_of_processing, type_of_processing_expl = answer_dict.get("TYPE OF PROCESSING", ("-1", "Answer missing."))
         explanation += " " + type_of_processing_expl
         if type_of_processing == "1": # Culinary ingredients
-            type_ad_answer = "2"
-        elif type_of_processing == "2": # Processed food
             type_ad_answer = "3"
-        elif type_of_processing == "3": # Ultra-processed
+        elif type_of_processing == "2": # Processed food
             type_ad_answer = "4"
+        elif type_of_processing == "3": # Ultra-processed
+            type_ad_answer = "1"
         else: 
             type_ad_answer = "-1"
             explanation += " Answer missing."
     elif initial_processing_level == "3":  # Alcohol
-        type_ad_answer = "5"
+        type_ad_answer = "A"
     elif initial_processing_level == "4":  # Non applicable
         type_ad_answer = "NA"
     else:
         type_ad_answer = "NA"
         explanation += " Answer missing."
-
-    return type_ad_answer, explanation
-
-
-def get_q6_answer(answer_dict):
-    initial_category, initial_category_expl = answer_dict.get("INITIAL CATEGORY", ("-1", "Answer missing"))
-    explanation = initial_category_expl
-
-    if initial_category == "1":  # Drink or Dairy Product
-        drink_dairy, drink_dairy_expl = answer_dict.get("DRINK DAIRY", ("-1", "Answer missing"))
-        explanation += " " + drink_dairy_expl
-        if drink_dairy == "1": # Drinks
-            type_ad_answer = "1"
-        elif drink_dairy == "2": # Milk and alternatives
-            type_ad_answer = "10"
-        elif drink_dairy == "3": # Cheese
-            type_ad_answer = "9"
-        else:
-            type_ad_answer = "-1"
-            explanation += " Answer missing."
-    elif initial_category == "2":  # Vegetable, Fruit, or Legume
-        vegetable_fruit_legume, vegetable_fruit_legume_expl = answer_dict.get("VEGETABLE FRUIT LEGUME", ("-1", "Answer missing"))
-        explanation += " " + vegetable_fruit_legume_expl
-        if vegetable_fruit_legume == "1": # Vegetable
-            type_ad_answer = "2"
-        elif vegetable_fruit_legume == "2": # Fruit
-            type_ad_answer = "3"
-        elif vegetable_fruit_legume == "3": # Legume
-            type_ad_answer = "6"
-        else:
-            type_ad_answer = "-1"
-            explanation += " Answer missing."
-    elif initial_category == "3":  # Grain, Nut, or Meat
-        grain_nut_meat, grain_nut_meat_expl = answer_dict.get("GRAIN NUT MEAT", ("-1", "Answer missing"))
-        explanation += " " + grain_nut_meat_expl
-        if grain_nut_meat == "1": # Bread
-            type_ad_answer = "4"
-        elif grain_nut_meat == "2": # Nuts
-            type_ad_answer = "5"
-        elif grain_nut_meat == "3": # Eggs
-            type_ad_answer = "8"
-        elif grain_nut_meat == "4": # Fish
-            type_ad_answer = "11"
-        elif grain_nut_meat == "5": # Meat
-            type_ad_answer = "12"
-        elif grain_nut_meat == "6": # Oils
-            type_ad_answer = "7"
-        else:
-            type_ad_answer = "-1"
-            explanation += " Answer missing."
-    elif initial_category == "4":  # Outside the Healthy Living Triangle or Non-applicable
-        outside_triangle_non_applicable, outside_triangle_non_applicable_expl = answer_dict.get("OUTSIDE_TRIANGLE_NON_APPLICABLE", ("-1", "Answer missing"))
-        explanation += " " + outside_triangle_non_applicable_expl
-        if outside_triangle_non_applicable == "1": # Outside the triangle
-            type_ad_answer = "13"
-        elif outside_triangle_non_applicable == "2": # Alcohol
-            type_ad_answer = "A"
-        elif outside_triangle_non_applicable == "3": # Non-applicable
-            type_ad_answer = "NA"
-        else:
-            type_ad_answer = "NA"
-            explanation += " Answer missing - Non applicable."
-    else:
-        type_ad_answer = "-1"
-        explanation = "Answer missing or ambiguous."
 
     return type_ad_answer, explanation
