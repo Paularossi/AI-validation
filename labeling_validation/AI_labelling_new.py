@@ -13,8 +13,9 @@ client = OpenAI()
 api_key = os.environ["OPENAI_API_KEY"]
 image_folder = "data/unique_images"
 AD_PATTERN = re.compile(r"(.+?)\.(png|jpeg|jpg)")
-PATTERN_PAYLOAD_OUTPUT = re.compile(r"\*(.*?)\*: ([^\n]+?) - (.*?)(?=\n\*|$)", re.DOTALL)
+PATTERN_PAYLOAD_OUTPUT = re.compile(r"\*{1,2}(.*?)\*{1,2}: ([^\n]+?) - (.*?)(?=\n\*|$)", re.DOTALL) # for 2 sets of stars
 all_questions = [type_ad, marketing_str, premium_offer, who_cat, processed]
+
 
 headers = {
     "Content-Type": "application/json",
@@ -38,11 +39,18 @@ def label_images(images, captions):
         image_url = f"data:image/jpeg;base64,{base64_image}"
 
         ad_id = AD_PATTERN.findall(image)[0][0]
-        ad_creative_bodies = captions[captions["img_id"] == ad_id]["ad_creative_bodies"].values[0]
-            
+        ad_creative_bodies = captions[captions["img_id"] == ad_id]["ad_creative_bodies"].values
+        page_name = captions[captions["img_id"] == ad_id]["page_name"].values[0]
+        
+        # check if ad_creative_bodies exists and is not NaN
+        if len(ad_creative_bodies) == 0 or pd.isna(ad_creative_bodies):
+            ad_creative_bodies = "AD TEXT NOT AVAILABLE"
+        else:
+            ad_creative_bodies = ad_creative_bodies[0]
+    
         # shuffle the order of the questions
         all_shuffled_questions = random.sample(all_questions, len(all_questions))
-            
+
         shuffled_questions = []
         for main_question in all_shuffled_questions:
             shuffled_questions.extend(main_question)
@@ -50,7 +58,8 @@ def label_images(images, captions):
         messages = [{"role": "system", "content": instructions_1}]
         user_content = [{"type": "text", "text": q[0] + ": " + q[1]} for q in shuffled_questions] 
         user_content.append({"type": "image_url", "image_url": {"url": image_url}})
-        user_content.append({"type": "text", "text": ad_creative_bodies})
+        user_content.append({"type": "text", "text": "Page name: " + page_name})
+        user_content.append({"type": "text", "text": "Ad caption: " + ad_creative_bodies})
         messages.append({"role": "user", "content": user_content})
 
         # define payload for the API call
@@ -61,6 +70,11 @@ def label_images(images, captions):
         }
         try:
             response_intro = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+            if response_intro.status_code != 200:
+                print(f"Error: Received status code {response_intro.status_code} for image {image}")
+                print(f"Response text: {response_intro.text}")
+                raise ValueError(f"API returned status code: {response_intro.status_code}")
+            
             print(response_intro.json())
 
             answers_1 = response_intro.json()['choices'][0]['message']['content']
@@ -94,23 +108,58 @@ def label_images(images, captions):
                 
         results.append(dict_entry)
     
-    labeling_outputs = pd.DataFrame(results)
-    labeling_outputs['img_id'] = labeling_outputs['img_id'].astype(str)
+    try:
+        labeling_outputs = pd.DataFrame(results)
+        labeling_outputs['img_id'] = labeling_outputs['img_id'].astype(str)
+    except Exception as e:
+        print(results)
+        print(f"Unable to convert the output to a dataframe. Returning the data as it is.")
+        return results, responses
     
     return labeling_outputs, responses
 
+
 # start from here
 images = [file for file in os.listdir(image_folder) if file.lower().endswith(('.jpg', '.jpeg', '.png'))]
-# randomly sample 100 images for a little analysis
-sampled_images = random.sample(images, 5)
+
+# read the ads data
 ads_data = pd.read_excel("validation results/digital_coding_clean.xlsx")
+coded_ads = pd.read_excel("validation results/labeling_outputs.xlsx")
+ads = coded_ads["img_id"].tolist() # to exclude these images
+
+uncoded_images = [image for image in images if os.path.splitext(image)[0] not in ads]
+# randomly sample 50 images for analysis
+sampled_images = random.sample(uncoded_images, min(50, len(uncoded_images)))
 
 img_names = [os.path.splitext(image)[0] for image in sampled_images]
-ads_subset = ads_data[ads_data["img_id"].isin(img_names)][["img_id", "ad_creative_bodies"]]
+ads_subset = ads_data[ads_data["img_id"].isin(img_names)][["img_id", "ad_creative_bodies", "page_name"]]
 
 labeling_outputs, responses = label_images(sampled_images, ads_subset)
+labeling_outputs.to_excel('validation results/temppppp.xlsx', index=False)
 
-# for ad_3673407462987001_img the coding seems wrong..?
 
 
-# ad_1487281292054307_img
+
+
+
+
+# save the images from the analysis to a separate folder (for a manual check):
+import shutil
+dest = "validation results/ad type/predicted 1 actual 8"
+folder = "validation results/images"
+#dest = "validation results/images"
+images_to_copy = pd.read_excel("validation results/ad type/predicted 1 actual 8/pred_1_act_8.xlsx")
+image_ids = images_to_copy['img_id'].astype(str) + ".png"
+for image_id in image_ids:
+    source_image_path = os.path.join(folder, image_id)
+    
+    if os.path.exists(source_image_path):
+        destination_image_path = os.path.join(dest, image_id)
+        if not os.path.exists(destination_image_path):
+            shutil.move(source_image_path, destination_image_path) # change to copy if needed
+            
+            print(f"Copied: {source_image_path} -> {destination_image_path}")
+        else:
+            print("=========IMAGE WAS ALREADY COPIED========")
+    else:
+        print(f"Image not found: {source_image_path}")

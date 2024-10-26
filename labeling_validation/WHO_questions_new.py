@@ -1,10 +1,11 @@
 
 instructions_1 = (
-    "You will be provided with a picture of an advertisement delivered to Belgium/Netherlands, and its corresponding text, either in English, French or Dutch. "
-    "You will be given sets of questions on different topics regarding the content of the image, along with definitions and examples for each question. "
+    "You will be provided with a picture of an online advertisement delivered to Belgium/Netherlands, its corresponding text, either in English, French or Dutch, and the name of the company running the ad. "
+    "You will be given sets of questions on different topics regarding the content of the advertisement, along with definitions and examples for each question. "
     "You need to answer all the questions with Yes/No, along with a short explanation for the answer. "
-    "Write your answers like this: *CARTOON*: [Yes/No] - [explanation]; *CELEBRITY*: [Yes/No] - [explanation]; and so on. Make sure you write one set of stars around the question label. "
-    "Ensure that each answer includes a brief explanation of the features in the image/text that led to your choice. Ensure that you answer all questions."
+    "Preserve a strictly structured answer to ease parsing of the text, by only writing the label of the question, the Yes/No answer and the explanation. "
+    "Write your answers like this: *CARTOON*: Yes/No - explanation; *CELEBRITY*: Yes/No - explanation; and so on. Ensure that the question label is between a set of stars. "
+    "Ensure that each answer includes a brief explanation of the features in the image/text that led to your choice. Ensure that you answer all questions. "
 )
 
 type_ad = [
@@ -20,19 +21,18 @@ type_ad = [
     ("INFANT_FORMULA", "Is the ad promoting infant formula, follow-up, or growing-up milks? (e.g. an ad for Enfamil or Aptamil) ")
 ]
 
-# would we consider Black week? ad_1056614579090265_img - check the original coding, seems wrong..?
 marketing_str = [
     ("CARTOON", "This set of questions is about marketing strategies used in the ad. Answer with Yes/No to each question. Is there a cartoon character specifically created by or for a company to represent their brand, e.g. Tony the Tiger for Frosted Flakes or M&Ms characters? "),
-    ("LICENSED CHARACTER", "Is there a licensed character (well-known characters from TV shows or books)? e.g. Dora the explorer, Mickey Mouse "),
-    ("MOVIE TIE-IN", "Is there a movie tie-in? (Promotional strategies that align products or brands with popular films, utilizing themes, characters, or storylines from movies) "),
-    ("FAMOUS SPORTS", "Are there famous athletes or sports teams that are recognized on a national or international level? "),
-    ("AMATEUR SPORTS", "Are there amateur people playing sports (non-professional level)? "),
+    ("LICENSED_CHARACTER", "Is there a licensed character (well-known characters from TV shows or books)? e.g. Dora the explorer, Mickey Mouse "),
+    ("MOVIE_TIE_IN", "Is there a movie tie-in? (Promotional strategies that align products or brands with popular films, utilizing themes, characters, or storylines from movies) "),
+    ("FAMOUS_SPORTS", "Are there famous athletes or sports teams that are recognized on a national or international level? "),
+    ("AMATEUR_SPORTS", "Are there amateur people playing sports (non-professional level)? "),
     ("CELEBRITY", "Are there non-sports celebrities? e.g. Jamie Oliver"),
     ("KIDS", "Are there marketing messages or products specifically designed for children? "),
     ("STUDENTS", "Are there marketing strategies focused on older children and young adults, particularly those in educational settings? "),
     ("AWARDS", "Are there strategies related to awards? (recognitions or accolades received by a product or brand that signify quality or excellence) "),
     ("EVENTS", "Are there strategies tied to non-sports, cultural events, historical anniversaries, or festivals? "),
-    ("SPORT EVENTS", "Are there strategies related to major sporting events? e.g. Olympic Games, Tour de France")
+    ("SPORT_EVENTS", "Are there strategies related to major sporting events? e.g. Olympic Games, Tour de France")
 ]
 
 premium_offer = [
@@ -40,7 +40,7 @@ premium_offer = [
     ("CONTESTS", "Are there promotions/contests where consumers enter to win prizes by completing specific actions, often requiring purchase or engagement? "),
     ("2FOR3", "Are there offers that encourage bulk purchasing by providing extra products for a reduced price? e.g. buy 1 get 1 free, 3 for the price of 2 "),
     ("EXTRA", "Are there promotions offering additional product quantity for the same price? e.g. 20%% extra, 50 grams free "),
-    ("LIMITED", "Are there special products offered for a short time? e.g. limited edition, seasonal flavours "),
+    ("LIMITED", "Are there special products offered for a short/limited time? e.g. limited edition, seasonal flavours "),
     ("CHARITY", "Are there offers where a portion of proceeds goes to a charitable cause? e.g. Every Purchase Helps Local Farmers "),
     ("GIFTS", "Are there promotions that include free gifts or collectible items with purchases? "),
     ("DISCOUNT", "Are there direct reductions in the selling price of products? e.g. €1 Off Any Product "),
@@ -75,12 +75,12 @@ who_cat = [
 ]
 
 processed = [
-    ("NA PROCESSING", "Does the image not depict any food or beverage and the processing level is therefore non-applicable?"),
-    ("UNPROCESSED", "This set of questions is about the level of food processing in the image. Answer each question with Yes/No. Does the food belong to unprocessed or minimally processed food? (natural foods that have undergone minimal alterations, such as cleaning, drying, or freezing, without significant changes to their nutritional content, e.g. fresh fruits, whole grains, eggs, fresh meat) "),
+    ("NA_PROCESSING", "This set of questions is about the level of food processing in the image. Answer each question with Yes/No. Does the image not depict any food or beverage and the processing level is therefore non-applicable?"),
+    ("ALCOHOL", "Is there alcohol in the image? "),
+    ("UNPROCESSED", "Does the food belong to unprocessed or minimally processed food? (natural foods that have undergone minimal alterations, such as cleaning, drying, or freezing, without significant changes to their nutritional content, e.g. fresh fruits, whole grains, eggs, fresh meat) "),
     ("PROCESSED", "Does the food belong to processed food? (Foods that have undergone processes such as canning, smoking, fermentation, or preservation, often with added ingredients to extend shelf life or enhance flavor, e.g. canned vegetables, cheeses, smoked meats, bread) "),
-    ("ULTRA PROCESSED", "Does the food belong to ultra-processed food? (formulations of industrial ingredients, resulting from a series of industrial processes such as frying, chemical modifications, application of additives. They typically contain little or no whole foods, e.g. chips, candy, instant noodles, soft drinks, fast-food) "),
-    ("INGREDIENTS", "Does the food represent processed culinary ingredients? (substances extracted or refined from minimally processed foods, typically used in cooking or seasoning other food, e.g. sugar, vegetable oils, butter, salt) "),
-    ("ALCOHOL", "Is there alcohol in the image? ")
+    ("ULTRA_PROCESSED", "Does the food belong to ultra-processed food? (formulations of industrial ingredients, resulting from a series of industrial processes such as frying, chemical modifications, application of additives. They typically contain little or no whole foods, e.g. chips, candy, instant noodles, soft drinks, fast-food) "),
+    ("INGREDIENTS", "Does the food represent processed culinary ingredients? (substances extracted or refined from minimally processed foods, typically used in cooking or seasoning other food, e.g. sugar, vegetable oils, butter, salt) ")
 ]
 
 
@@ -120,7 +120,7 @@ def get_ad_type(answer_dict):
         return "10", answer_dict["INFANT_FORMULA"][1]
     
     # if no matches are found, return "NA" with a default explanation
-    return "NA", "No applicable ad type was found."
+    return "-1", "No applicable ad type was found."
 
 
 def get_marketing_strategy(answer_dict):
@@ -132,21 +132,25 @@ def get_marketing_strategy(answer_dict):
         strategies.append("1")  # Cartoon character
         explanations.append(answer_dict["CARTOON"][1])
 
-    if answer_dict["LICENSED CHARACTER"][0] == "Yes":
+    if answer_dict["LICENSED_CHARACTER"][0] == "Yes":
         strategies.append("2")  # Licensed character
-        explanations.append(answer_dict["LICENSED CHARACTER"][1])
+        explanations.append(answer_dict["LICENSED_CHARACTER"][1])
+    try:
+        if answer_dict["MOVIE_TIE_IN"][0] == "Yes":
+            strategies.append("5")  # Movie tie-in
+            explanations.append(answer_dict["MOVIE_TIE_IN"][1])
+    except:
+        if answer_dict["MOVIE_TIE-IN"][0] == "Yes":
+            strategies.append("5")  # Movie tie-in
+            explanations.append(answer_dict["MOVIE_TIE-IN"][1])
 
-    if answer_dict["MOVIE TIE-IN"][0] == "Yes":
-        strategies.append("5")  # Movie tie-in
-        explanations.append(answer_dict["MOVIE TIE-IN"][1])
-
-    if answer_dict["FAMOUS SPORTS"][0] == "Yes":
+    if answer_dict["FAMOUS_SPORTS"][0] == "Yes":
         strategies.append("6")  # Famous athletes or sports teams
-        explanations.append(answer_dict["FAMOUS SPORTS"][1])
+        explanations.append(answer_dict["FAMOUS_SPORTS"][1])
 
-    if answer_dict["AMATEUR SPORTS"][0] == "Yes":
+    if answer_dict["AMATEUR_SPORTS"][0] == "Yes":
         strategies.append("3")  # Amateur sports
-        explanations.append(answer_dict["AMATEUR SPORTS"][1])
+        explanations.append(answer_dict["AMATEUR_SPORTS"][1])
 
     if answer_dict["CELEBRITY"][0] == "Yes":
         strategies.append("4")  # Non-sports celebrities
@@ -168,9 +172,9 @@ def get_marketing_strategy(answer_dict):
         strategies.append("7")  # Cultural or historical events
         explanations.append(answer_dict["EVENTS"][1])
 
-    if answer_dict["SPORT EVENTS"][0] == "Yes":
+    if answer_dict["SPORT_EVENTS"][0] == "Yes":
         strategies.append("10")  # Sporting events
-        explanations.append(answer_dict["SPORT EVENTS"][1])
+        explanations.append(answer_dict["SPORT_EVENTS"][1])
 
     # if no marketing strategies are found, return 0 with a default explanation
     if not strategies:
@@ -237,6 +241,9 @@ def get_who_cat(answer_dict):
     who_categories = []
     explanations = []
 
+    if answer_dict["NA"][0] == "Yes":
+        return "NA", answer_dict["NA"][1] # Non-applicable
+        
     # check each WHO category and append to the list if it's present in the ad (Yes).
     if answer_dict["CHOCOLATE_SUGAR"][0] == "Yes":
         who_categories.append("1")  # Chocolate and sugar confectionery
@@ -326,10 +333,6 @@ def get_who_cat(answer_dict):
         who_categories.append("A")  # Alcohol
         explanations.append(answer_dict["ALCOHOL"][1])
 
-    if answer_dict["NA"][0] == "Yes":
-        who_categories.append("NA")  # Non-applicable
-        explanations.append(answer_dict["NA"][1])
-
     if answer_dict["NS"][0] == "Yes":
         who_categories.append("NS")  # Non-specified
         explanations.append(answer_dict["NS"][1])
@@ -345,8 +348,14 @@ def get_who_cat(answer_dict):
 
 
 def get_processing_level(answer_dict):
-    if answer_dict["ULTRA PROCESSED"][0] == "Yes":
-        return "1", answer_dict["ULTRA PROCESSED"][1]  # Ultra-processed food
+    if answer_dict["ALCOHOL"][0] == "Yes":
+        return "A", answer_dict["ALCOHOL"][1]  # Alcohol
+    
+    elif answer_dict["NA_PROCESSING"][0] == "Yes":
+        return "NA", answer_dict["NA_PROCESSING"][1]  # Non-applicable
+        
+    elif answer_dict["ULTRA_PROCESSED"][0] == "Yes":
+        return "1", answer_dict["ULTRA_PROCESSED"][1]  # Ultra-processed food
     
     elif answer_dict["PROCESSED"][0] == "Yes":
         return "4", answer_dict["PROCESSED"][1]  # Processed food
@@ -357,11 +366,6 @@ def get_processing_level(answer_dict):
     elif answer_dict["INGREDIENTS"][0] == "Yes":
         return "3", answer_dict["INGREDIENTS"][1]  # Processed culinary ingredients
     
-    elif answer_dict["ALCOHOL"][0] == "Yes":
-        return "A", answer_dict["ALCOHOL"][1]  # Alcohol
-    
-    elif answer_dict["NA PROCESSING"][0] == "Yes":
-        return "NA", answer_dict["NA PROCESSING"][1]  # Alcohol
     
     # if none of the food processing levels apply, return "NA" with a default explanation
     return "NA", "No applicable food processing level was found in the ad."
