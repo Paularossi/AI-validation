@@ -8,8 +8,11 @@ instructions_1 = (
     "Ensure that each answer includes a brief explanation of the features in the image/text that led to your choice. Ensure that you answer all questions. "
 )
 
-type_ad = [
-    ("FOOD_PRODUCT_COMPANY", "Is the ad promoting a food or drink product from a food company or brand? (e.g. Coca-Cola, Nestlé, Heinz ketchup) "),
+# the questions need: (1) to be mutually exclusive, (2) to have a definition and (3) to give examples
+# add a new question about the target audience and give explanations for each category (remove "for kids" from marketing strategies)
+
+type_ad = [ # change here
+    ("FOOD_PRODUCT_COMPANY", "Is the ad promoting a specific food or drink product from a food company/brand or manufacturer, which is visible in the image or text? (e.g. a Coca-cola bottle in someone's hand) "),
     ("FOOD_PRODUCT_NONFOOD_COMPANY", "Is the ad promoting a food or drink product but created by a non-food brand/company/retailer/service/event? (e.g. a bank sponsoring free coffee at an event) "),
     ("FOOD_COMPANY_NO_PRODUCT", "Is the ad promoting a food or drink company or brand without showing a specific food or drink product? (e.g. an ad for Nestlé as a brand but not for a specific product) "),
     ("RETAILER_FOOD_PRODUCT", "Is the ad from a food or drink retailer (supermarket or convenience store) featuring a specific food or drink product? (e.g. a supermarket ad showcasing discounts on fresh produce) "),
@@ -17,9 +20,12 @@ type_ad = [
     ("RESTAURANT_FOOD_PRODUCT", "Is the ad from a food or drink retailer (restaurant, takeaway, or fast food) featuring a specific food or drink product? (e.g. a McDonald’s ad promoting their new burger) "),
     ("RESTAURANT_NO_FOOD_PRODUCT", "Is the ad from a food or drink retailer (restaurant, takeaway, or fast food) without showcasing any specific food or drink product? (e.g. an ad focusing on restaurant ambiance or service) "),
     ("NONFOOD_PRODUCT", "Is the ad promoting a non-food or drink product or service? (e.g. a mobile phone or car ad) "),
-    ("ALCOHOL_PRODUCT", "Is the ad promoting an alcoholic product or brand? (e.g. beer, wine, liquor) "),
+    ("ALCOHOL_PRODUCT", "Is the ad promoting an alcoholic product? (e.g. beer, wine, liquor) "),
     ("INFANT_FORMULA", "Is the ad promoting infant formula, follow-up, or growing-up milks? (e.g. an ad for Enfamil or Aptamil) ")
 ]
+
+# licensed characters are owned by a specific company, change cartoons to mention "not licensed chars"
+# remove age-targeted strategies and create a new question
 
 marketing_str = [
     ("CARTOON", "This set of questions is about marketing strategies used in the ad. Answer with Yes/No to each question. Is there a cartoon character specifically created by or for a company to represent their brand, e.g. Tony the Tiger for Frosted Flakes or M&Ms characters? "),
@@ -81,6 +87,11 @@ processed = [
     ("PROCESSED", "Does the food belong to processed food? (Foods that have undergone processes such as canning, smoking, fermentation, or preservation, often with added ingredients to extend shelf life or enhance flavor, e.g. canned vegetables, cheeses, smoked meats, bread) "),
     ("ULTRA_PROCESSED", "Does the food belong to ultra-processed food? (formulations of industrial ingredients, resulting from a series of industrial processes such as frying, chemical modifications, application of additives. They typically contain little or no whole foods, e.g. chips, candy, instant noodles, soft drinks, fast-food) "),
     ("INGREDIENTS", "Does the food represent processed culinary ingredients? (substances extracted or refined from minimally processed foods, typically used in cooking or seasoning other food, e.g. sugar, vegetable oils, butter, salt) ")
+]
+
+# it contains an alcoholic product
+alcohol = [
+    ()
 ]
 
 
