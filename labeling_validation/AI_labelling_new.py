@@ -14,7 +14,7 @@ api_key = os.environ["OPENAI_API_KEY"]
 image_folder = "data/unique_images"
 AD_PATTERN = re.compile(r"(.+?)\.(png|jpeg|jpg)")
 PATTERN_PAYLOAD_OUTPUT = re.compile(r"\*{1,2}(.*?)\*{1,2}: ([^\n]+?) - (.*?)(?=\n\*|$)", re.DOTALL) # for 2 sets of stars
-all_questions = [type_ad, marketing_str, premium_offer, who_cat, processed]
+all_questions = [alcohol, type_ad, marketing_str, premium_offer, who_cat, target_age_group]
 
 
 headers = {
@@ -31,6 +31,7 @@ def encode_image(image_path):
 def label_images(images, captions):
     results = [] # for the labels
     responses = []
+    #image = all_image_ids[2] # remove this
     
     for image in images:
         print(f'======== Labeling image: {image}. ========\n')
@@ -54,6 +55,11 @@ def label_images(images, captions):
         shuffled_questions = []
         for main_question in all_shuffled_questions:
             shuffled_questions.extend(main_question)
+            
+        # add UPF
+        #shuffled_questions.extend(processed)
+        # add speculation
+        shuffled_questions.extend(speculation)
             
         messages = [{"role": "system", "content": instructions_1}]
         user_content = [{"type": "text", "text": q[0] + ": " + q[1]} for q in shuffled_questions] 
@@ -85,7 +91,9 @@ def label_images(images, captions):
             marketing_str, marketing_str_explanation = get_marketing_strategy(answer_dict)
             prem_offer, prem_offer_explanation = get_premium_offer(answer_dict)
             who_cat, who_cat_explanation = get_who_cat(answer_dict)
-            processed, processed_explanation = get_processing_level(answer_dict)
+            #processed, processed_explanation = get_processing_level(answer_dict)
+            target_group, target_group_expl = get_target_group(answer_dict)
+            is_alcohol, is_alcohol_expl = get_alcohol(answer_dict)
                                 
             dict_entry = {
                 "img_id": ad_id,
@@ -95,10 +103,16 @@ def label_images(images, captions):
                 "marketing_str_expl": marketing_str_explanation,
                 "prem_offer": prem_offer,
                 "prem_offer_expl": prem_offer_explanation,
+                "target_group": target_group,
+                "target_group_expl": target_group_expl,
                 "who_cat": who_cat,
                 "who_cat_expl": who_cat_explanation,
-                "processed": processed,
-                "processed_expl": processed_explanation
+                #"processed": processed,
+                #"processed_expl": processed_explanation,
+                "is_alcohol": is_alcohol,
+                "is_alcohol_expl": is_alcohol_expl,
+                "speculation": answer_dict["SPECULATION_LEVEL"][0], # added speculation
+                "speculation_expl": answer_dict["SPECULATION_LEVEL"][1]
             }
             print(dict_entry) 
         
@@ -129,9 +143,41 @@ ads = coded_ads["img_id"].tolist() # to exclude these images
 
 uncoded_images = [image for image in images if os.path.splitext(image)[0] not in ads]
 # randomly sample 50 images for analysis
-sampled_images = random.sample(uncoded_images, min(50, len(uncoded_images)))
+sampled_images = random.sample(uncoded_images, 10)
+#sampled_images = [images[45]]
 
-img_names = [os.path.splitext(image)[0] for image in sampled_images]
+sampled_images = ['ad_365774349852854_img.png', 'ad_1117594759672868_4_img.png', 'ad_1351354515801982_img.png', 'ad_724883825637062_img.png', 'ad_1357155365155188_img.png']
+
+# my own sample of coded ads:
+my_ads = pd.read_csv("data/validation sample/survey-ai/myads.csv")
+image_columns = [f'Image{i}_ID' for i in range(1, 6)]
+all_image_ids = my_ads[image_columns].values.flatten().tolist()
+
+long_list = []
+
+for i in range(1, 6):
+    # create a dictionary mapping original column names to new names
+    col_map = {
+        f'Image{i}_ID': 'image_id',
+        f'alcohol_image{i}': 'alcohol',
+        f'non_alcohol_image{i}': 'non_alcohol',
+        f'prem_offer_image{i}': 'prem_offer',
+        f'target_group_image{i}': 'target_group',
+        f'ad_type_image{i}': 'ad_type',
+        f'marketing_str_image{i}': 'marketing_str',
+        f'who_cat_image{i}': 'who_cat'
+    }
+    
+    # Select only the columns we need for image i and rename them
+    temp_df = my_ads[list(col_map.keys())].rename(columns=col_map)
+    
+    temp_df['image_number'] = i
+    
+    long_list.append(temp_df)
+
+df_long = pd.concat(long_list, ignore_index=True)
+
+img_names = [os.path.splitext(image)[0] for image in all_image_ids] # change to in sampled_images
 ads_subset = ads_data[ads_data["img_id"].isin(img_names)][["img_id", "ad_creative_bodies", "page_name"]]
 
 labeling_outputs, responses = label_images(sampled_images, ads_subset)
@@ -145,18 +191,20 @@ labeling_outputs.to_excel('validation results/temppppp.xlsx', index=False)
 
 # save the images from the analysis to a separate folder (for a manual check):
 import shutil
-dest = "validation results/ad type/predicted 1 actual 8"
+dest = "validation results/miscl/marketing/predicted 7 actual 0"
 folder = "validation results/images"
 #dest = "validation results/images"
-images_to_copy = pd.read_excel("validation results/ad type/predicted 1 actual 8/pred_1_act_8.xlsx")
+images_to_copy = pd.read_excel(os.path.join(dest, "pred_7_act_0_markt.xlsx"))
 image_ids = images_to_copy['img_id'].astype(str) + ".png"
+len(image_ids)
+
 for image_id in image_ids:
     source_image_path = os.path.join(folder, image_id)
     
     if os.path.exists(source_image_path):
         destination_image_path = os.path.join(dest, image_id)
         if not os.path.exists(destination_image_path):
-            shutil.move(source_image_path, destination_image_path) # change to copy if needed
+            shutil.copy(source_image_path, destination_image_path) # change to copy if needed
             
             print(f"Copied: {source_image_path} -> {destination_image_path}")
         else:

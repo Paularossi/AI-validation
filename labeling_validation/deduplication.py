@@ -4,6 +4,7 @@ from PIL import Image
 import shutil
 import re
 import pandas as pd
+import ast
 
 
 def extract_ids_from_images(folder_path):
@@ -12,9 +13,16 @@ def extract_ids_from_images(folder_path):
 
     # Create an empty list to store the IDs
     unique_ids = []
-
     seen_ids = []
-    for filename in os.listdir(folder_path):
+    all_ids = []
+    try:
+        file_list = os.listdir(folder_path)
+        print("Reading from path...")
+    except Exception as e:
+        file_list = folder_path
+        print("Reading as list...")
+        
+    for filename in file_list:
         # Match the filename against the pattern
         match = pattern.match(filename)
         if match:
@@ -24,10 +32,11 @@ def extract_ids_from_images(folder_path):
             if main_id not in seen_ids:
                 unique_ids.append(main_id)
                 seen_ids.append(main_id)
+            all_ids.append(main_id)
         else:
             print(f"Image {filename} was not a match")
 
-    return unique_ids
+    return unique_ids, all_ids
 
 
 def calculate_image_hash(image_path):
@@ -88,18 +97,84 @@ def deduplicate_images(image_folder, unique_img_folder):
     print(f"Found {len(duplicate_images)} duplicates and saved {len(unique_images)} unique images inside {unique_img_folder}.")
 
 
+def process_ad_new_lines_emojis(text):
+    # check if the text is missing
+    if pd.isna(text) or text.strip() == "":
+        return "Ad text not available."
+    
+    # now check for repetitive sentences
+    sentences = text.split(", ") 
+    
+    unique_sentences = []
+    seen = set()
+    
+    for sentence in sentences:
+        if sentence not in seen:
+            unique_sentences.append(sentence)
+            seen.add(sentence)
+            print("new")
+        else:
+            print("duplicate")
+    
+    text = ", ".join(unique_sentences) # join them together
+    
+    # check for emojis
+    emoji_regex = r"\\U[0-9a-fA-F]{8}"
+    # find all Unicode sequences (\U followed by 8 hex digits)
+    matches = re.findall(emoji_regex, text)
+
+    for match in matches:
+        try:
+            # Convert Unicode to the actual character
+            emoji = chr(int(match[2:], 16))
+            text = text.replace(match, emoji)
+        except ValueError:
+            # Log unsupported sequences
+            print(f"Unsupported Unicode: {match}")
+
+    return text
+
+
 image_folder = 'output/Belgium/ads_images'
-unique_img_folder = 'output/Belgium/unique_images'
+unique_img_folder = 'data/unique_images'
 deduplicate_images(image_folder, unique_img_folder)
 
-df = pd.read_excel('output/Belgium/ads_data/Belgium_original_data.xlsx')
+df = pd.read_excel('data/Belgium_ads_subset.xlsx')
+mturk = pd.read_csv('data/MTurk data old.csv')
+mturk.img_id
 
-unique_image_ids = extract_ids_from_images(unique_img_folder)
+unique_image_ids, _ = extract_ids_from_images(unique_img_folder) # take only unique ids
+_, mturk["clean_img_id"] = extract_ids_from_images(mturk["img_id"]) # take all ids
 
 len(unique_image_ids)
+mturk.columns
+mturk.iloc[1:5, [4,6]]
 
+# process the text
+mturk['ad_bodies_clean'] = mturk['ad_bodies_clean'].str.replace("\\n", "<br>") # new lines
+# emojis
+mturk['ad_bodies_clean'] = mturk['ad_bodies_clean'].apply(process_ad_new_lines_emojis)
+
+mturk.to_excel('data/MTurk data.xlsx', index=False)
+
+# get the text for the original data
+mturk = pd.read_excel('data/MTurk data.xlsx')
+ads_data_orig = pd.read_excel('validation results/digital_coding_clean.xlsx')
+ads_data_orig.head
+
+mturk['img_id']
+ads_data_orig['img_id_new']  = ads_data_orig['img_id'] + ".png"
+
+final_d = mturk.merge(ads_data_orig, left_on='img_id', right_on='img_id_new',
+          suffixes=('_left', '_right'))
+
+final_d.to_excel('validation results/temp.xlsx', index=False)
+
+
+# old stuff:
 # filter the DataFrame to only include rows with IDs in the unique_image_ids list
 filtered_df = df[df['id'].astype(str).isin(unique_image_ids)]
+
 len(filtered_df)
 
 # for img_id in unique_image_ids:

@@ -1,101 +1,121 @@
 
 instructions_1 = (
-    "You will be provided with a picture of an online advertisement delivered to Belgium/Netherlands, its corresponding text, either in English, French or Dutch, and the name of the company running the ad. "
-    "You will be given sets of questions on different topics regarding the content of the advertisement, along with definitions and examples for each question. "
-    "You need to answer all the questions with Yes/No, along with a short explanation for the answer. "
-    "Preserve a strictly structured answer to ease parsing of the text, by only writing the label of the question, the Yes/No answer and the explanation. "
-    "Write your answers like this: *CARTOON*: Yes/No - explanation; *CELEBRITY*: Yes/No - explanation; and so on. Ensure that the question label is between a set of stars. "
+    "You will be provided with a picture of an online advertisement delivered to Belgium/Netherlands, its corresponding text (which may be in English, French, or Dutch), and the name of the company running the ad. "
+    "You will be given sets of questions of questions about various aspects of the advertisement along with definitions and examples. "
+    "Please answer each question on a new line using the exact format: *QUESTION_LABEL*: Yes/No - Brief explanation. Do not include any extra text, greetings, or commentary. "
+    "For example, your answers should look like: *CARTOON*: Yes/No - explanation; *CELEBRITY*: Yes/No - explanation; and so on. Ensure that the question label is between a set of stars. "
     "Ensure that each answer includes a brief explanation of the features in the image/text that led to your choice. Ensure that you answer all questions. "
+    "You will also be provided with a set of definitions which you should refer to when answering: "
+    "1. Food/drink manufacturing company or brand – a company or brand involved in producing and processing foods or beverages. Manufacturers focus on creating and packaging of consumable goods rather than selling directly to consumers. This category excludes restaurant/takeaway/delivery companies or brands and food retailers. "
+    "2. Food/drink retailer – a company or brand that sells food and drink products directly to consumers for home consumption (e.g., supermarkets, grocery stores, convenience stores and specialty food shops). These retailers primarily serve as intermediaries, providing a variety of products from different manufacturers to the end consumer. This category excludes manufacturing companies and restaurant/takeaway/delivery companies or brands. "
+    "3. Restaurant/takeaway/delivery outlet – a food service establishment that prepares and sells ready-to-eat meals and beverages for immediate consumption (either on the premises, through takeaway, or via delivery). These outlets focus on providing prepared food directly to customers for immediate or near-immediate consumption and do not primarily sell food or drink items in raw or packaged form for home cooking. This category excludes food retailers and manufacturing companies or brands. "
+    # "4. Unprocessed or minimally processed food – natural foods (excluding Alcohol) that have undergone minimal changes (such as cleaning, drying, or freezing) without significant alteration to their nutritional content, e.g., fresh meat, eggs, frozen fruit. "
+    # "5. Processed food – foods (excluding Alcohol) that have undergone processes like canning, smoking, fermentation or preservation, often with added ingredients to extend shelf life or enhance flavour, e.g., canned tomatoes, cheese, bread, smoked meat, dry fish. "
+    # "6. Ultra-processed food – formulations of industrial ingredients (excluding Alcohol), resulting from a series of industrial processes such as frying, chemical modifications or application of additives, containinh little or no whole foods, e.g., chips, candy, instant noodles, soft drinks, fast-food. "
+    # "7. Processed culinary ingredients – substances (excluding Alcohol) extracted or refined from minimally processed foods, typically used in cooking or seasoning other food, e.g., sugar, butter, oils, spices."
 )
 
 # the questions need: (1) to be mutually exclusive, (2) to have a definition and (3) to give examples
-# add a new question about the target audience and give explanations for each category (remove "for kids" from marketing strategies)
 
-type_ad = [ # change here
-    ("FOOD_PRODUCT_COMPANY", "Is the ad promoting a specific food or drink product from a food company/brand or manufacturer, which is visible in the image or text? (e.g. a Coca-cola bottle in someone's hand) "),
-    ("FOOD_PRODUCT_NONFOOD_COMPANY", "Is the ad promoting a food or drink product but created by a non-food brand/company/retailer/service/event? (e.g. a bank sponsoring free coffee at an event) "),
-    ("FOOD_COMPANY_NO_PRODUCT", "Is the ad promoting a food or drink company or brand without showing a specific food or drink product? (e.g. an ad for Nestlé as a brand but not for a specific product) "),
-    ("RETAILER_FOOD_PRODUCT", "Is the ad from a food or drink retailer (supermarket or convenience store) featuring a specific food or drink product? (e.g. a supermarket ad showcasing discounts on fresh produce) "),
-    ("RETAILER_NO_FOOD_PRODUCT", "Is the ad from a food or drink retailer (supermarket or convenience store) without featuring any specific food or drink product? (e.g. a store ad focusing on customer service without showcasing any products) "),
-    ("RESTAURANT_FOOD_PRODUCT", "Is the ad from a food or drink retailer (restaurant, takeaway, or fast food) featuring a specific food or drink product? (e.g. a McDonald’s ad promoting their new burger) "),
-    ("RESTAURANT_NO_FOOD_PRODUCT", "Is the ad from a food or drink retailer (restaurant, takeaway, or fast food) without showcasing any specific food or drink product? (e.g. an ad focusing on restaurant ambiance or service) "),
+type_ad = [ # make it clear that this question is about the company running the ad
+    ("FOOD_PRODUCT_COMPANY", "This set of questions is about the company running the ad. Is the ad promoting a specific food or drink product from a food/drink manufacturing company or brand, was directly evidenced by the image or text? (e.g. a Coca-cola bottle in someone's hand) "),
+    ("FOOD_PRODUCT_NONFOOD_COMPANY", "Is the ad promoting a specific food or drink product but created by a non-food brand/company/retailer/service/event? (e.g. a bank sponsoring free coffee at an event) "),
+    ("FOOD_COMPANY_NO_PRODUCT", "Is the ad promoting a food or drink manufacturing company or brand, without showing a specific food or drink product? (e.g. an ad for Nestlé as a brand but not for a specific food or drink) "),
+    ("RETAILER_FOOD_PRODUCT", "Is the ad promoting a specific food or drink product from a food or drink retailer? (e.g., a supermarket ad showcasing discounts on fresh produce) "),
+    ("RETAILER_NO_FOOD_PRODUCT", "Is the ad promoting a food or drink retailer without featuring any specific food or drink product? (e.g., a store ad focusing on clothes or electronics products) "),
+    ("RESTAURANT_FOOD_PRODUCT", "Is the ad promoting a specific food or meal or drink product from a restaurant/takeaway/delivery outlet? (e.g., a McDonald’s ad promoting a new burger) "),
+    ("RESTAURANT_NO_FOOD_PRODUCT", "Is the ad promoting a restaurant/takeaway/delivery outlet without showcasing any specific food or meal or drink product? (e.g., a restaurant ad focusing on restaurant ambiance or service without showing specific foods or meals) "),
     ("NONFOOD_PRODUCT", "Is the ad promoting a non-food or drink product or service? (e.g. a mobile phone or car ad) "),
-    ("ALCOHOL_PRODUCT", "Is the ad promoting an alcoholic product? (e.g. beer, wine, liquor) "),
     ("INFANT_FORMULA", "Is the ad promoting infant formula, follow-up, or growing-up milks? (e.g. an ad for Enfamil or Aptamil) ")
 ]
 
 # licensed characters are owned by a specific company, change cartoons to mention "not licensed chars"
-# remove age-targeted strategies and create a new question
 
 marketing_str = [
-    ("CARTOON", "This set of questions is about marketing strategies used in the ad. Answer with Yes/No to each question. Is there a cartoon character specifically created by or for a company to represent their brand, e.g. Tony the Tiger for Frosted Flakes or M&Ms characters? "),
-    ("LICENSED_CHARACTER", "Is there a licensed character (well-known characters from TV shows or books)? e.g. Dora the explorer, Mickey Mouse "),
-    ("MOVIE_TIE_IN", "Is there a movie tie-in? (Promotional strategies that align products or brands with popular films, utilizing themes, characters, or storylines from movies) "),
-    ("FAMOUS_SPORTS", "Are there famous athletes or sports teams that are recognized on a national or international level? "),
-    ("AMATEUR_SPORTS", "Are there amateur people playing sports (non-professional level)? "),
-    ("CELEBRITY", "Are there non-sports celebrities? e.g. Jamie Oliver"),
-    ("KIDS", "Are there marketing messages or products specifically designed for children? "),
-    ("STUDENTS", "Are there marketing strategies focused on older children and young adults, particularly those in educational settings? "),
-    ("AWARDS", "Are there strategies related to awards? (recognitions or accolades received by a product or brand that signify quality or excellence) "),
-    ("EVENTS", "Are there strategies tied to non-sports, cultural events, historical anniversaries, or festivals? "),
-    ("SPORT_EVENTS", "Are there strategies related to major sporting events? e.g. Olympic Games, Tour de France")
+    ("OWNED_CARTOON", "This set of questions is about marketing strategies used in the ad. Answer with Yes/No to each question. Are there characters specifically created/owned by a company to represent its brand, often used in advertising and product packaging? These characters help establish brand identity and engage with consumers, especially children (e.g., M&Ms, Dino from the Dino brand) "),
+    ("LICENSED_CHARACTER", "Are there well-known characters from TV shows or books that a brand pays to use in its promotions? These characters attract fans and enhance the appeal of products through their existing popularity (e.g., Miffy (Nijntje), Mickey Mouse) "),
+    ("OTHER_CHARACTER", "Are there other character types (not owned/licensed) that represent cartoons and are not associated with a company/brand (e.g. cartoon-style animals on a lunchbox) "),
+    ("MOVIE_TIE_IN", "Are there promotional strategies that align products or brands with popular films, utilizing themes, characters, or storylines from the movies to attract audiences and enhance product appeal? (e.g., Shrek, Frozen) "),
+    ("FAMOUS_SPORTS", "Are there renowned athletes or sports teams that are recognized on a national or international level? Their endorsements can lend authority and desirability to products, particularly in sports and fitness markets (e.g., Belgian Red Devils, Kevin de Bruyne) "),
+    ("AMATEUR_SPORTS", "Are there individuals who participate in sports at a non-professional level, often representing community teams or clubs? Their relatability can foster a sense of connection with local consumers and promote healthy lifestyles (e.g., a person playing a sport) "),
+    ("CELEBRITY", "Are there well-known public figures from various fields such as entertainment, music, or literature who endorse products or brands? Their fame can significantly boost brand visibility and credibility (e.g., Jeroen Meus, Jamie Oliver) "),
+    ("AWARDS", "Are there recognitions or accolades received by a product or brand that signify quality or excellence? Featuring awards in marketing materials can enhance credibility and consumer trust (e.g., “Best Beer of 2024”) "),
+    ("EVENTS", "Are there promotions tied to significant cultural events, historical anniversaries, or festivals that resonate with the target audience? These events provide a thematic backdrop for marketing campaigns and engage consumers on an emotional level (e.g., Christmas, Halloween) "),
+    ("SPORT_EVENTS", "Are there promotions that coincide with major sporting events, leveraging the excitement and audience engagement of the event? This strategy often includes sponsorships, themed products, and advertising tied to the event’s timeline (e.g., Tour de France, Olympic Games)")
+]
+
+target_age_group = [
+    ("CHILD_TARGETED", "This set of questions is about the target age group of the ad. Is the ad targeted at children up to 15 years old? These ads often use simplified messaging, bright colors, and fun or animated characters that resonate with a younger audience. They may feature elements like toys, games, or collectibles and focus on excitement, fun, and social inclusion. The ad may also indirectly appeal to parents by highlighting educational or health benefits. "),
+    ("ADOLESCENT_TARGETED", "Is the ad targeted at adolescents between 16 and 18 years old? These ads often highlight themes of individuality, self-expression, and peer influence. They frequently use influencers, social media trends, or aspirational messaging to appeal to teenagers' desire for autonomy, status, or connection to their peers. "),
+    ("ADULT_TARGETED", "Is the ad targeted at adults with no specific focus on children or adolescents? These ads emphasize practical, emotional, or lifestyle benefits relevant to a broad adult audience. Messaging may focus on value, quality, sophistication, or relatable everyday needs. ")
 ]
 
 premium_offer = [
-    ("GAMES", "This set of questions is about premium offers used in the ad. Are there offers that incentivize consumers to download mobile games or apps? "),
-    ("CONTESTS", "Are there promotions/contests where consumers enter to win prizes by completing specific actions, often requiring purchase or engagement? "),
+    ("GAMES", "This set of questions is about premium offers used in the ad. Are there offers that incentivize consumers to download mobile games or apps, often tied to promotions or rewards (e.g. 'download the McDonald's app to receive a free hamburger') "),
+    ("CONTESTS", "Are there promotions/contests where consumers enter to win prizes by completing specific actions, often requiring purchase or engagement (e.g., social media photo contests encouraging participants to share picture with a specific product to win prizes). "),
     ("2FOR3", "Are there offers that encourage bulk purchasing by providing extra products for a reduced price? e.g. buy 1 get 1 free, 3 for the price of 2 "),
-    ("EXTRA", "Are there promotions offering additional product quantity for the same price? e.g. 20%% extra, 50 grams free "),
-    ("LIMITED", "Are there special products offered for a short/limited time? e.g. limited edition, seasonal flavours "),
-    ("CHARITY", "Are there offers where a portion of proceeds goes to a charitable cause? e.g. Every Purchase Helps Local Farmers "),
-    ("GIFTS", "Are there promotions that include free gifts or collectible items with purchases? "),
-    ("DISCOUNT", "Are there direct reductions in the selling price of products? e.g. €1 Off Any Product "),
-    ("LOYALTY", "Are there programs that reward loyal customers for repeat purchases, often through points or discounts? e.g. Coffee shop loyalty stamps ")
+    ("EXTRA", "Are there promotions offering additional product quantity for the same price? e.g. 20%% extra, 50 extra grams free "),
+    ("LIMITED", "Are there special products offered for a short/limited time? e.g., limited Halloween edition on candies, seasonal flavor of Dutch stroopwafels available only during Christmas holidays "),
+    ("CHARITY", "Are there offers where a portion of proceeds goes to a charitable cause, appealing to socially conscious consumers? e.g., 'Every Purchase Helps Local Farmers' or 'Plant a tree with every purchase' "),
+    ("GIFTS", "Are there promotions that include free gifts or collectible items with purchases, encouraging repeat buys? me.g., collectible cups offered with every purchase of a specific soft drink "),
+    ("DISCOUNT", "Are there direct reductions in the selling price of products, making them more attractive to consumers? e.g., '€1 Off Any Product', temporary price discount during Black Friday "),
+    ("LOYALTY", "Are there programs that reward loyal customers for repeat purchases, often through points or discounts? e.g. coffee stamp cards, supermarket loyalty cards offering points that can be redeemed for discounts or free products ")
 ]
 
 who_cat = [
-    ("CHOCOLATE_SUGAR", "Does the ad feature chocolate or sugar confectionery? (e.g. candy bars, chocolates, gummies) "),
-    ("CAKES_PASTRIES", "Does the ad feature cakes or pastries? (e.g. cupcakes, doughnuts, croissants) "),
-    ("SAVOURY_SNACKS", "Does the ad feature savoury snacks? (e.g. crisps, pretzels, salted nuts) "),
-    ("JUICES", "Does the ad feature juices? (e.g. orange juice, apple juice) "),
-    ("MILK_DRINKS", "Does the ad feature milk drinks? (e.g. flavoured milk, milkshakes) "),
-    ("ENERGY_DRINKS", "Does the ad feature energy drinks? (e.g. Red Bull, Monster) "),
-    ("OTHER_BEVERAGES", "Does the ad feature other beverages such as soft drinks or sweetened beverages? (e.g. soda, iced tea) "),
-    ("WATERS_TEA_COFFEE", "Does the ad feature unsweetened waters, tea, or coffee? (e.g. bottled water, black tea, black coffee) "),
-    ("EDIBLE_ICES", "Does the ad feature edible ices? (e.g. ice cream, popsicles) "),
-    ("BREAKFAST_CEREALS", "Does the ad feature breakfast cereals? (e.g. cornflakes, muesli) "),
-    ("YOGHURTS", "Does the ad feature yoghurts, sour milk, cream, etc.? (e.g. Greek yoghurt, sour cream) "),
-    ("CHEESE", "Does the ad feature cheese? (e.g. cheddar, gouda, feta) "),
-    ("READYMADE_CONVENIENCE", "Does the ad feature ready-made or convenience foods and composite dishes? (e.g. frozen meals, pizza) "),
-    ("BUTTER_OILS", "Does the ad feature butter or other fats and oils? (e.g. butter, margarine, olive oil) "),
-    ("BREAD_PRODUCTS", "Does the ad feature bread, bread products, or crispbreads? (e.g. sandwich bread, baguettes, rye crackers) "),
-    ("PASTA_RICE_GRAINS", "Does the ad feature fresh or dried pasta, rice, or grains? (e.g. spaghetti, rice, quinoa) "),
-    ("FRESH_MEAT_POULTRY_FISH", "Does the ad feature fresh or frozen meat, poultry, fish, or eggs? (e.g. chicken breasts, salmon fillets, eggs) "),
-    ("PROCESSED_MEAT_POULTRY_FISH", "Does the ad feature processed meat, poultry, fish, or similar? (e.g. sausages, smoked fish) "),
-    ("FRESH_FRUIT_VEG", "Does the ad feature fresh or frozen fruit, vegetables, or legumes? (e.g. apples, broccoli, lentils) "),
-    ("PROCESSED_FRUIT_VEG", "Does the ad feature processed fruit, vegetables, or legumes? (e.g. tinned fruit, dried vegetables) "),
-    ("SAUCES_DIPS_DRESSINGS", "Does the ad feature sauces, dips, or dressings? (e.g. ketchup, mayonnaise, guacamole) "),
-    ("ALCOHOL", "Does the ad feature alcohol? (e.g. beer, wine, spirits) "),
+    ("CHOCOLATE_SUGAR", "Does the ad feature chocolate or sugar confectionery? (caramels, jellies, cereal bars, spreadable chocolate, honey, table sugar, excluding cakes, jams and sweet desserts) "),
+    ("CAKES_PASTRIES", "Does the ad feature cakes or pastries? (cookies, cakes, pies, pastries, pancakes, waffles, scones, baked desserts, dry mixes for making cakes and other sweet baked goods, excluding bread and bread products) "),
+    ("SAVOURY_SNACKS", "Does the ad feature savoury snacks? (crackers, nuts, seeds, popcorn, chips, pretzels) "),
+    ("JUICES", "Does the ad feature juices? (100%% fruit and vegetable juices, smoothies, excluding sweetened fruit nectars) "),
+    ("DAIRY_MILK_DRINKS", "Does the ad feature dairy milk drinks? (dairy milks both sweetened and unsweetened, milkshakes, coffees with milk, excluding cream) "),
+    ("PLANT_MILK_DRINKS", "Does the ad feature plant-based milk drinks? (plant-based milks both sweetened and unsweetened, milkshakes, coffees with plant-based milk) "),
+    ("ENERGY_DRINKS", "Does the ad feature energy drinks? (beverages containing caffeine or other stimulants such as guarana, taurine, glucuronolactone and vitamins, excluding coffee and tea) "),
+    ("SOFT_DRINKS", "Does the ad feature other beverages such as soft drinks or sweetened beverages? (water-based flavored drinks (carbonated and still), fruit and vegetable nectars) "),
+    ("WATERS_TEA_COFFEE", "Does the ad feature unsweetened waters, tea, or coffee? (waters (including mineral waters), coffee, tea, other hot beverages) "),
+    ("EDIBLE_ICES", "Does the ad feature edible ices? (dairy and plant-based ice creams (including sorbets), frozen yogurts) "),
+    ("BREAKFAST_CEREALS", "Does the ad feature breakfast cereals? (minimally processed breakfast cereals (instant oats, porridge mix) and highly processed breakfast cereals (muesli, granola)) "),
+    ("YOGHURTS", "Does the ad feature yoghurts, sour milk or similar? (yogurt and sour milks (kefir, buttermilk, drinking yogurt), fruit yogurt, crème fraiche, whipped cream, excluding frozen yogurt) "),
+    ("CHEESE", "Does the ad feature cheese? (hard, medium and soft cheeses, processed cheeses, cheese spreads, Gouda, Cheddar, Gruyere, Parmesan, Brie) "),
+    ("READYMADE_CONVENIENCE", "Does the ad feature ready-made or convenience foods and composite dishes? (tinned composite dishes (e.g., meatballs in sauce and baked beans), pasta, noodles and rice with sauce, pizza, sandwiches and wraps (e.g., hot dogs, hamburgers), ready-to-eat meals composed of a combination of carbohydrate and either vegetable or meat, soups (ready-to-eat, tinned), frozen and refrigerated dishes (frozen pizza, frozen fish sticks)) "),
+    ("BUTTER_OILS", "Does the ad feature butter or other fats and oils? (e.g. butter, margarine, olive oil, oil-based spreads) "),
+    ("BREAD_PRODUCTS", "Does the ad feature bread, bread products, or crispbreads? (sweet and raisin breads (brioche), flatbreads, tortillas, pita, leavened bread (all types of cereal flours, e.g., white, or whole-grain wheat, spelt and rye)) "),
+    ("PASTA_RICE_GRAINS", "Does the ad feature fresh or dried pasta, rice, or grains? (e.g. spaghetti, rice, quinoa, bulgur, buckwheat) "),
+    ("FRESH_MEAT_POULTRY_FISH", "Does the ad feature fresh or frozen meat, poultry, fish, or eggs? (chicken breasts, salmon fillets, eggs) "),
+    ("PROCESSED_MEAT_POULTRY_FISH", "Does the ad feature processed meat, poultry, fish, or similar? (tinned tuna, smoked fish, ham, burgers, sausages, fish fingers, breaded meat products) "),
+    ("VEGAN_MEAT", "Does the ad feature savoury plant-based foods/meat analogues? (tofu and tempeh, veggie burgers, veggie sausages) "),
+    ("FRESH_FRUIT_VEG", "Does the ad feature fresh or frozen fruit, vegetables, or legumes? (e.g. apples, broccoli, lentils, fruit and vegetables without additional ingredients) "),
+    ("PROCESSED_FRUIT_VEG", "Does the ad feature processed fruit, vegetables, or legumes? (tinned, pickled, dried, battered (e.g., deep fried onion rings) and breaded vegetables and fruits, pouches, jams and marmalades) "),
+    ("SAUCES_DIPS_DRESSINGS", "Does the ad feature sauces, dips, or dressings? (stock cubes, cooking sauces (pasta sauces), dips, salad dressings, condiments (ketchup)) "),
     ("NA", "Is the ad for a non-applicable company or brand that does not feature any foods or drinks? "),
     ("NS", "Is the product category in the ad non-specified or unclear? ")
 ]
 
+# adapt this to classify for all foods selected in the ad
 processed = [
-    ("NA_PROCESSING", "This set of questions is about the level of food processing in the image. Answer each question with Yes/No. Does the image not depict any food or beverage and the processing level is therefore non-applicable?"),
-    ("ALCOHOL", "Is there alcohol in the image? "),
-    ("UNPROCESSED", "Does the food belong to unprocessed or minimally processed food? (natural foods that have undergone minimal alterations, such as cleaning, drying, or freezing, without significant changes to their nutritional content, e.g. fresh fruits, whole grains, eggs, fresh meat) "),
-    ("PROCESSED", "Does the food belong to processed food? (Foods that have undergone processes such as canning, smoking, fermentation, or preservation, often with added ingredients to extend shelf life or enhance flavor, e.g. canned vegetables, cheeses, smoked meats, bread) "),
-    ("ULTRA_PROCESSED", "Does the food belong to ultra-processed food? (formulations of industrial ingredients, resulting from a series of industrial processes such as frying, chemical modifications, application of additives. They typically contain little or no whole foods, e.g. chips, candy, instant noodles, soft drinks, fast-food) "),
-    ("INGREDIENTS", "Does the food represent processed culinary ingredients? (substances extracted or refined from minimally processed foods, typically used in cooking or seasoning other food, e.g. sugar, vegetable oils, butter, salt) ")
+    ("NA_PROCESSING", "This set of questions is about the level of food processing in the image. Answer each question with Yes/No. Does the image not depict any food or beverage and the processing level is therefore non-applicable? "),
+    ("UNPROCESSED", "Does the food belong to unprocessed or minimally processed food and is not alcohol? (e.g. fresh fruits, whole grains, eggs, fresh meat) "),
+    ("PROCESSED", "Does the food belong to processed food and is not alcohol? (e.g. canned vegetables, cheeses, smoked meats, bread) "),
+    ("ULTRA_PROCESSED", "Does the food belong to ultra-processed food and is not alcohol? (e.g. chips, candy, instant noodles, soft drinks, fast-food) "),
+    ("INGREDIENTS", "Does the food represent processed culinary ingredients and is not alcohol? (e.g. sugar, vegetable oils, butter, salt) ")
 ]
 
-# it contains an alcoholic product
 alcohol = [
-    ()
+    ("ALCOHOL", "Can you see the presence of alcoholic drinks or alcoholic brands in the ad? (e.g. items like beer, wine, etc., or brands like Jupiler, Heineken, etc.)")
+]
+
+speculation = [
+    ("SPECULATION_LEVEL", "Final question. Based on the ad's image and text, rate on a scale from 0 to 10 how much you had to speculate or guess rather than rely on directly observable information. (0 means every answer is fully supported by the ad; 10 means answers required extensive inference.) Provide a brief explanation of your rating.")
 ]
 
 
 # Answer Logic:
+
+def get_alcohol(answer_dict):
+    if answer_dict["ALCOHOL"][0] == "Yes":
+        return "1", answer_dict["ALCOHOL"][1] 
+    
+    return "0", "The ad does not feature alcoholic drinks or brands."
+    
 
 def get_ad_type(answer_dict):
     
@@ -124,9 +144,6 @@ def get_ad_type(answer_dict):
     elif answer_dict["NONFOOD_PRODUCT"][0] == "Yes":
         return "8", answer_dict["NONFOOD_PRODUCT"][1]
     
-    elif answer_dict["ALCOHOL_PRODUCT"][0] == "Yes":
-        return "9", answer_dict["ALCOHOL_PRODUCT"][1]
-    
     elif answer_dict["INFANT_FORMULA"][0] == "Yes":
         return "10", answer_dict["INFANT_FORMULA"][1]
     
@@ -139,48 +156,43 @@ def get_marketing_strategy(answer_dict):
     explanations = []
 
     # check each strategy and append to the list if it's present in the ad (Yes)
-    if answer_dict["CARTOON"][0] == "Yes":
+    if answer_dict["OWNED_CARTOON"][0] == "Yes": 
         strategies.append("1")  # Cartoon character
-        explanations.append(answer_dict["CARTOON"][1])
+        explanations.append(answer_dict["OWNED_CARTOON"][1])
 
     if answer_dict["LICENSED_CHARACTER"][0] == "Yes":
         strategies.append("2")  # Licensed character
         explanations.append(answer_dict["LICENSED_CHARACTER"][1])
+    if answer_dict["OTHER_CHARACTER"][0] == "Yes":
+        strategies.append("3")  # Licensed character
+        explanations.append(answer_dict["OTHER_CHARACTER"][1])
     try:
         if answer_dict["MOVIE_TIE_IN"][0] == "Yes":
-            strategies.append("5")  # Movie tie-in
+            strategies.append("4")  # Movie tie-in
             explanations.append(answer_dict["MOVIE_TIE_IN"][1])
     except:
         if answer_dict["MOVIE_TIE-IN"][0] == "Yes":
-            strategies.append("5")  # Movie tie-in
+            strategies.append("4")  # Movie tie-in
             explanations.append(answer_dict["MOVIE_TIE-IN"][1])
 
     if answer_dict["FAMOUS_SPORTS"][0] == "Yes":
-        strategies.append("6")  # Famous athletes or sports teams
+        strategies.append("5")  # Famous athletes or sports teams
         explanations.append(answer_dict["FAMOUS_SPORTS"][1])
 
     if answer_dict["AMATEUR_SPORTS"][0] == "Yes":
-        strategies.append("3")  # Amateur sports
+        strategies.append("6")  # Amateur sports
         explanations.append(answer_dict["AMATEUR_SPORTS"][1])
 
     if answer_dict["CELEBRITY"][0] == "Yes":
-        strategies.append("4")  # Non-sports celebrities
+        strategies.append("7")  # Non-sports celebrities
         explanations.append(answer_dict["CELEBRITY"][1])
-
-    if answer_dict["KIDS"][0] == "Yes":
-        strategies.append("8a")  # Marketing aimed at children
-        explanations.append(answer_dict["KIDS"][1])
-
-    if answer_dict["STUDENTS"][0] == "Yes":
-        strategies.append("8b")  # Marketing aimed at students
-        explanations.append(answer_dict["STUDENTS"][1])
-
+        
     if answer_dict["AWARDS"][0] == "Yes":
-        strategies.append("9")  # Awards-related marketing
+        strategies.append("8")  # Awards-related marketing
         explanations.append(answer_dict["AWARDS"][1])
 
     if answer_dict["EVENTS"][0] == "Yes":
-        strategies.append("7")  # Cultural or historical events
+        strategies.append("9")  # Cultural or historical events
         explanations.append(answer_dict["EVENTS"][1])
 
     if answer_dict["SPORT_EVENTS"][0] == "Yes":
@@ -248,6 +260,20 @@ def get_premium_offer(answer_dict):
     return premium_offers_string, explanations_string
 
 
+def get_target_group(answer_dict):
+    if answer_dict["CHILD_TARGETED"][0] == "Yes":
+        return "1", answer_dict["CHILD_TARGETED"][1]
+    
+    elif answer_dict["ADOLESCENT_TARGETED"][0] == "Yes":
+        return "2", answer_dict["ADOLESCENT_TARGETED"][1]
+    
+    elif answer_dict["ADULT_TARGETED"][0] == "Yes":
+        return "3", answer_dict["ADULT_TARGETED"][1]
+    
+    else:
+        return "-1", "Missing answer."
+
+
 def get_who_cat(answer_dict):
     who_categories = []
     explanations = []
@@ -272,20 +298,24 @@ def get_who_cat(answer_dict):
         who_categories.append("4a")  # Juices
         explanations.append(answer_dict["JUICES"][1])
 
-    if answer_dict["MILK_DRINKS"][0] == "Yes":
+    if answer_dict["DAIRY_MILK_DRINKS"][0] == "Yes":
         who_categories.append("4b")  # Milk drinks
-        explanations.append(answer_dict["MILK_DRINKS"][1])
+        explanations.append(answer_dict["DAIRY_MILK_DRINKS"][1])
+        
+    if answer_dict["PLANT_MILK_DRINKS"][0] == "Yes":
+        who_categories.append("4c")  # Milk drinks
+        explanations.append(answer_dict["PLANT_MILK_DRINKS"][1])
 
     if answer_dict["ENERGY_DRINKS"][0] == "Yes":
-        who_categories.append("4c")  # Energy drinks
+        who_categories.append("4d")  # Energy drinks
         explanations.append(answer_dict["ENERGY_DRINKS"][1])
 
-    if answer_dict["OTHER_BEVERAGES"][0] == "Yes":
-        who_categories.append("4d")  # Other beverages (Soft drinks, sweetened beverages)
-        explanations.append(answer_dict["OTHER_BEVERAGES"][1])
+    if answer_dict["SOFT_DRINKS"][0] == "Yes":
+        who_categories.append("4e")  # Other beverages (Soft drinks, sweetened beverages)
+        explanations.append(answer_dict["SOFT_DRINKS"][1])
 
     if answer_dict["WATERS_TEA_COFFEE"][0] == "Yes":
-        who_categories.append("4e")  # Waters, tea, and coffee (unsweetened)
+        who_categories.append("4f")  # Waters, tea, and coffee (unsweetened)
         explanations.append(answer_dict["WATERS_TEA_COFFEE"][1])
 
     if answer_dict["EDIBLE_ICES"][0] == "Yes":
@@ -335,9 +365,13 @@ def get_who_cat(answer_dict):
     if answer_dict["PROCESSED_FRUIT_VEG"][0] == "Yes":
         who_categories.append("16")  # Processed fruit, vegetables, and legumes
         explanations.append(answer_dict["PROCESSED_FRUIT_VEG"][1])
+    
+    if answer_dict["VEGAN_MEAT"][0] == "Yes":
+        who_categories.append("17")  # vegan meat
+        explanations.append(answer_dict["VEGAN_MEAT"][1])
 
     if answer_dict["SAUCES_DIPS_DRESSINGS"][0] == "Yes":
-        who_categories.append("17")  # Sauces, dips, and dressings
+        who_categories.append("18")  # Sauces, dips, and dressings
         explanations.append(answer_dict["SAUCES_DIPS_DRESSINGS"][1])
 
     if answer_dict["ALCOHOL"][0] == "Yes":
@@ -359,10 +393,8 @@ def get_who_cat(answer_dict):
 
 
 def get_processing_level(answer_dict):
-    if answer_dict["ALCOHOL"][0] == "Yes":
-        return "A", answer_dict["ALCOHOL"][1]  # Alcohol
     
-    elif answer_dict["NA_PROCESSING"][0] == "Yes":
+    if answer_dict["NA_PROCESSING"][0] == "Yes":
         return "NA", answer_dict["NA_PROCESSING"][1]  # Non-applicable
         
     elif answer_dict["ULTRA_PROCESSED"][0] == "Yes":
