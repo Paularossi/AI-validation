@@ -9,10 +9,12 @@ instructions_1 = (
     "1. Food/drink manufacturing company or brand – a company or brand involved in producing and processing foods or beverages. Manufacturers focus on creating and packaging of consumable goods rather than selling directly to consumers. This category excludes restaurant/takeaway/delivery companies or brands and food retailers. "
     "2. Food/drink retailer – a company or brand that sells food and drink products directly to consumers for home consumption (e.g., supermarkets, grocery stores, convenience stores and specialty food shops). These retailers primarily serve as intermediaries, providing a variety of products from different manufacturers to the end consumer. This category excludes manufacturing companies and restaurant/takeaway/delivery companies or brands. "
     "3. Restaurant/takeaway/delivery outlet – a food service establishment that prepares and sells ready-to-eat meals and beverages for immediate consumption (either on the premises, through takeaway, or via delivery). These outlets focus on providing prepared food directly to customers for immediate or near-immediate consumption and do not primarily sell food or drink items in raw or packaged form for home cooking. This category excludes food retailers and manufacturing companies or brands. "
-    # "4. Unprocessed or minimally processed food – natural foods (excluding Alcohol) that have undergone minimal changes (such as cleaning, drying, or freezing) without significant alteration to their nutritional content, e.g., fresh meat, eggs, frozen fruit. "
-    # "5. Processed food – foods (excluding Alcohol) that have undergone processes like canning, smoking, fermentation or preservation, often with added ingredients to extend shelf life or enhance flavour, e.g., canned tomatoes, cheese, bread, smoked meat, dry fish. "
-    # "6. Ultra-processed food – formulations of industrial ingredients (excluding Alcohol), resulting from a series of industrial processes such as frying, chemical modifications or application of additives, containinh little or no whole foods, e.g., chips, candy, instant noodles, soft drinks, fast-food. "
-    # "7. Processed culinary ingredients – substances (excluding Alcohol) extracted or refined from minimally processed foods, typically used in cooking or seasoning other food, e.g., sugar, butter, oils, spices."
+    "4. Unprocessed or minimally processed food – natural foods (excluding Alcohol) that have undergone minimal changes (such as cleaning, drying, or freezing) without significant alteration to their nutritional content, e.g., fresh meat, eggs, frozen fruit. "
+    "5. Processed food – foods (excluding Alcohol) that have undergone processes like canning, smoking, fermentation or preservation, often with added ingredients to extend shelf life or enhance flavour, e.g., canned tomatoes, cheese, bread, smoked meat, dry fish. "
+    "6. Ultra-processed food – formulations of industrial ingredients (excluding Alcohol), resulting from a series of industrial processes such as frying, chemical modifications or application of additives, containinh little or no whole foods, e.g., chips, candy, instant noodles, soft drinks, fast-food. "
+    "7. Processed culinary ingredients – substances (excluding Alcohol) extracted or refined from minimally processed foods, typically used in cooking or seasoning other food, e.g., sugar, butter, oils, spices. "
+    "For each [of the 23] food category, answer in the following format: *QUESTION_LABEL*: Yes/No - Brief explanation. If you answer 'Yes' for a category, immediately provide a follow-up line indicating the level of processing for that food item in the format: *<CATEGORY_LABEL>_PROCESSING*: <Processing Level> - Brief explanation. Do not include any additional commentary. "
+    "For example: *CHOCOLATE_SUGAR*: Yes – explanation; *CHOCOLATE_SUGAR_PROCESSING*: ULTRA_PROCESSED – explanation."
 )
 
 # the questions need: (1) to be mutually exclusive, (2) to have a definition and (3) to give examples
@@ -91,20 +93,20 @@ who_cat = [
 ]
 
 # adapt this to classify for all foods selected in the ad
-processed = [
-    ("NA_PROCESSING", "This set of questions is about the level of food processing in the image. Answer each question with Yes/No. Does the image not depict any food or beverage and the processing level is therefore non-applicable? "),
-    ("UNPROCESSED", "Does the food belong to unprocessed or minimally processed food and is not alcohol? (e.g. fresh fruits, whole grains, eggs, fresh meat) "),
-    ("PROCESSED", "Does the food belong to processed food and is not alcohol? (e.g. canned vegetables, cheeses, smoked meats, bread) "),
-    ("ULTRA_PROCESSED", "Does the food belong to ultra-processed food and is not alcohol? (e.g. chips, candy, instant noodles, soft drinks, fast-food) "),
-    ("INGREDIENTS", "Does the food represent processed culinary ingredients and is not alcohol? (e.g. sugar, vegetable oils, butter, salt) ")
-]
+# processed = [
+#     ("NA_PROCESSING", "This set of questions is about the level of food processing in the image. Answer each question with Yes/No. Does the image not depict any food or beverage and the processing level is therefore non-applicable? "),
+#     ("UNPROCESSED", "Does the food belong to unprocessed or minimally processed food and is not alcohol? (e.g. fresh fruits, whole grains, eggs, fresh meat) "),
+#     ("PROCESSED", "Does the food belong to processed food and is not alcohol? (e.g. canned vegetables, cheeses, smoked meats, bread) "),
+#     ("ULTRA_PROCESSED", "Does the food belong to ultra-processed food and is not alcohol? (e.g. chips, candy, instant noodles, soft drinks, fast-food) "),
+#     ("INGREDIENTS", "Does the food represent processed culinary ingredients and is not alcohol? (e.g. sugar, vegetable oils, butter, salt) ")
+# ]
 
 alcohol = [
     ("ALCOHOL", "Can you see the presence of alcoholic drinks or alcoholic brands in the ad? (e.g. items like beer, wine, etc., or brands like Jupiler, Heineken, etc.)")
 ]
 
 speculation = [
-    ("SPECULATION_LEVEL", "Final question. Based on the ad's image and text, rate on a scale from 0 to 10 how much you had to speculate or guess rather than rely on directly observable information. (0 means every answer is fully supported by the ad; 10 means answers required extensive inference.) Provide a brief explanation of your rating.")
+    ("SPECULATION_LEVEL", "Final question. Based on the ad's image and text, rate on a scale from 0 to 10 how much you had to speculate or guess your answers rather than rely on directly observable information. (0 means every answer is fully supported by the ad; 10 means answers required extensive inference.) Provide a brief explanation of your rating.")
 ]
 
 
@@ -277,6 +279,7 @@ def get_target_group(answer_dict):
 def get_who_cat(answer_dict):
     who_categories = []
     explanations = []
+    who_categories_text = [] # for the processing level
 
     if answer_dict["NA"][0] == "Yes":
         return "NA", answer_dict["NA"][1] # Non-applicable
@@ -285,98 +288,121 @@ def get_who_cat(answer_dict):
     if answer_dict["CHOCOLATE_SUGAR"][0] == "Yes":
         who_categories.append("1")  # Chocolate and sugar confectionery
         explanations.append(answer_dict["CHOCOLATE_SUGAR"][1])
+        who_categories_text.append("CHOCOLATE_SUGAR")
 
     if answer_dict["CAKES_PASTRIES"][0] == "Yes":
         who_categories.append("2")  # Cakes and pastries
         explanations.append(answer_dict["CAKES_PASTRIES"][1])
+        who_categories_text.append("CAKES_PASTRIES")
 
     if answer_dict["SAVOURY_SNACKS"][0] == "Yes":
         who_categories.append("3")  # Savoury snacks
         explanations.append(answer_dict["SAVOURY_SNACKS"][1])
+        who_categories_text.append("SAVOURY_SNACKS")
 
     if answer_dict["JUICES"][0] == "Yes":
         who_categories.append("4a")  # Juices
         explanations.append(answer_dict["JUICES"][1])
+        who_categories_text.append("JUICES")
 
     if answer_dict["DAIRY_MILK_DRINKS"][0] == "Yes":
         who_categories.append("4b")  # Milk drinks
         explanations.append(answer_dict["DAIRY_MILK_DRINKS"][1])
+        who_categories_text.append("DAIRY_MILK_DRINKS")
         
     if answer_dict["PLANT_MILK_DRINKS"][0] == "Yes":
         who_categories.append("4c")  # Milk drinks
         explanations.append(answer_dict["PLANT_MILK_DRINKS"][1])
+        who_categories_text.append("PLANT_MILK_DRINKS")
 
     if answer_dict["ENERGY_DRINKS"][0] == "Yes":
         who_categories.append("4d")  # Energy drinks
         explanations.append(answer_dict["ENERGY_DRINKS"][1])
+        who_categories_text.append("ENERGY_DRINKS")
 
     if answer_dict["SOFT_DRINKS"][0] == "Yes":
         who_categories.append("4e")  # Other beverages (Soft drinks, sweetened beverages)
         explanations.append(answer_dict["SOFT_DRINKS"][1])
+        who_categories_text.append("SOFT_DRINKS")
 
     if answer_dict["WATERS_TEA_COFFEE"][0] == "Yes":
         who_categories.append("4f")  # Waters, tea, and coffee (unsweetened)
         explanations.append(answer_dict["WATERS_TEA_COFFEE"][1])
+        who_categories_text.append("WATERS_TEA_COFFEE")
 
     if answer_dict["EDIBLE_ICES"][0] == "Yes":
         who_categories.append("5")  # Edible ices
         explanations.append(answer_dict["EDIBLE_ICES"][1])
+        who_categories_text.append("EDIBLE_ICES")
 
     if answer_dict["BREAKFAST_CEREALS"][0] == "Yes":
         who_categories.append("6")  # Breakfast cereals
         explanations.append(answer_dict["BREAKFAST_CEREALS"][1])
+        who_categories_text.append("BREAKFAST_CEREALS")
 
     if answer_dict["YOGHURTS"][0] == "Yes":
         who_categories.append("7")  # Yoghurts, sour milk, cream, etc.
         explanations.append(answer_dict["YOGHURTS"][1])
+        who_categories_text.append("YOGHURTS")
 
     if answer_dict["CHEESE"][0] == "Yes":
         who_categories.append("8")  # Cheese
         explanations.append(answer_dict["CHEESE"][1])
+        who_categories_text.append("CHEESE")
 
     if answer_dict["READYMADE_CONVENIENCE"][0] == "Yes":
         who_categories.append("9")  # Ready-made and convenience foods
         explanations.append(answer_dict["READYMADE_CONVENIENCE"][1])
+        who_categories_text.append("READYMADE_CONVENIENCE")
 
     if answer_dict["BUTTER_OILS"][0] == "Yes":
         who_categories.append("10")  # Butter and other fats and oils
         explanations.append(answer_dict["BUTTER_OILS"][1])
+        who_categories_text.append("BUTTER_OILS")
 
     if answer_dict["BREAD_PRODUCTS"][0] == "Yes":
         who_categories.append("11")  # Bread, bread products, and crisp breads
         explanations.append(answer_dict["BREAD_PRODUCTS"][1])
+        who_categories_text.append("BREAD_PRODUCTS")
 
     if answer_dict["PASTA_RICE_GRAINS"][0] == "Yes":
         who_categories.append("12")  # Fresh or dried pasta, rice, and grains
         explanations.append(answer_dict["PASTA_RICE_GRAINS"][1])
+        who_categories_text.append("PASTA_RICE_GRAINS")
 
     if answer_dict["FRESH_MEAT_POULTRY_FISH"][0] == "Yes":
         who_categories.append("13")  # Fresh and frozen meat, poultry, fish, and eggs
         explanations.append(answer_dict["FRESH_MEAT_POULTRY_FISH"][1])
+        who_categories_text.append("FRESH_MEAT_POULTRY_FISH")
 
     if answer_dict["PROCESSED_MEAT_POULTRY_FISH"][0] == "Yes":
         who_categories.append("14")  # Processed meat, poultry, fish, and similar
         explanations.append(answer_dict["PROCESSED_MEAT_POULTRY_FISH"][1])
+        who_categories_text.append("PROCESSED_MEAT_POULTRY_FISH")
 
     if answer_dict["FRESH_FRUIT_VEG"][0] == "Yes":
         who_categories.append("15")  # Fresh and frozen fruit, vegetables, and legumes
         explanations.append(answer_dict["FRESH_FRUIT_VEG"][1])
+        who_categories_text.append("FRESH_FRUIT_VEG")
 
     if answer_dict["PROCESSED_FRUIT_VEG"][0] == "Yes":
         who_categories.append("16")  # Processed fruit, vegetables, and legumes
         explanations.append(answer_dict["PROCESSED_FRUIT_VEG"][1])
+        who_categories_text.append("PROCESSED_FRUIT_VEG")
     
     if answer_dict["VEGAN_MEAT"][0] == "Yes":
         who_categories.append("17")  # vegan meat
         explanations.append(answer_dict["VEGAN_MEAT"][1])
+        who_categories_text.append("VEGAN_MEAT")
 
     if answer_dict["SAUCES_DIPS_DRESSINGS"][0] == "Yes":
         who_categories.append("18")  # Sauces, dips, and dressings
         explanations.append(answer_dict["SAUCES_DIPS_DRESSINGS"][1])
+        who_categories_text.append("SAUCES_DIPS_DRESSINGS")
 
-    if answer_dict["ALCOHOL"][0] == "Yes":
-        who_categories.append("A")  # Alcohol
-        explanations.append(answer_dict["ALCOHOL"][1])
+    # if answer_dict["ALCOHOL"][0] == "Yes":
+    #     who_categories.append("A")  # Alcohol
+    #     explanations.append(answer_dict["ALCOHOL"][1])
 
     if answer_dict["NS"][0] == "Yes":
         who_categories.append("NS")  # Non-specified
@@ -389,7 +415,7 @@ def get_who_cat(answer_dict):
     who_category_string = ", ".join(who_categories)
     explanations_string = " ".join(explanations)
 
-    return who_category_string, explanations_string
+    return who_category_string, explanations_string, who_categories_text
 
 
 def get_processing_level(answer_dict):
@@ -409,6 +435,36 @@ def get_processing_level(answer_dict):
     elif answer_dict["INGREDIENTS"][0] == "Yes":
         return "3", answer_dict["INGREDIENTS"][1]  # Processed culinary ingredients
     
-    
     # if none of the food processing levels apply, return "NA" with a default explanation
     return "NA", "No applicable food processing level was found in the ad."
+
+# need food categories as input; also returns a dictionary rather than strings
+def get_processing_level_new(answer_dict, who_cat_text, who_cat):
+    
+    if (len(who_cat_text) == 0):
+        return {"processed_NA": "NA"}, {"processed_explanation_NA": "No applicable food processing level was found in the ad."}
+
+    processing_levels = []
+    explanations = []
+    
+    for cat in who_cat_text:
+        try:
+            processing_levels.append(answer_dict[f"{cat}_PROCESSING"][0])
+            explanations.append(answer_dict[f"{cat}_PROCESSING"][1])
+        except Exception as e:
+            print(f"Category {cat} didn't have a processing level.")
+            processing_levels.append("NA")
+            explanations.append("No answer available.")
+            
+    # convert the who_cat string into a list
+    who_cat_list = [code.strip() for code in who_cat.split(',')]
+    
+    # create dictionaries mapping "processed_<category>" to the processing level and explanation.
+    proc_dict = {}
+    proc_exp_dict = {}
+    
+    for i, code in enumerate(who_cat_list):
+        proc_dict[f"processed_{code}"] = processing_levels[i]
+        proc_exp_dict[f"processed_explanation_{code}"] = explanations[i]
+        
+    return proc_dict, proc_exp_dict

@@ -31,7 +31,7 @@ def encode_image(image_path):
 def label_images(images, captions):
     results = [] # for the labels
     responses = []
-    #image = all_image_ids[2] # remove this
+    #image = all_image_ids[1] # remove this
     
     for image in images:
         print(f'======== Labeling image: {image}. ========\n')
@@ -40,7 +40,7 @@ def label_images(images, captions):
         image_url = f"data:image/jpeg;base64,{base64_image}"
 
         ad_id = AD_PATTERN.findall(image)[0][0]
-        ad_creative_bodies = captions[captions["img_id"] == ad_id]["ad_creative_bodies"].values
+        ad_creative_bodies = captions[captions["img_id"] == ad_id]["ad_creative_bodies"].values[0]
         page_name = captions[captions["img_id"] == ad_id]["page_name"].values[0]
         
         # check if ad_creative_bodies exists and is not NaN
@@ -74,6 +74,7 @@ def label_images(images, captions):
             "messages": messages,
             "temperature": 0.01
         }
+        
         try:
             response_intro = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
             if response_intro.status_code != 200:
@@ -90,8 +91,8 @@ def label_images(images, captions):
             ad_type, ad_type_explanation = get_ad_type(answer_dict)
             marketing_str, marketing_str_explanation = get_marketing_strategy(answer_dict)
             prem_offer, prem_offer_explanation = get_premium_offer(answer_dict)
-            who_cat, who_cat_explanation = get_who_cat(answer_dict)
-            #processed, processed_explanation = get_processing_level(answer_dict)
+            who_cat, who_cat_explanation, who_cat_text = get_who_cat(answer_dict)
+            processed_dict, processed_explanation_dict = get_processing_level_new(answer_dict, who_cat_text, who_cat)
             target_group, target_group_expl = get_target_group(answer_dict)
             is_alcohol, is_alcohol_expl = get_alcohol(answer_dict)
                                 
@@ -114,6 +115,10 @@ def label_images(images, captions):
                 "speculation": answer_dict["SPECULATION_LEVEL"][0], # added speculation
                 "speculation_expl": answer_dict["SPECULATION_LEVEL"][1]
             }
+            
+            # update with the processed dictionary
+            dict_entry.update(processed_dict)
+            dict_entry.update(processed_explanation_dict)
             print(dict_entry) 
         
         except Exception as e:
@@ -144,7 +149,6 @@ ads = coded_ads["img_id"].tolist() # to exclude these images
 uncoded_images = [image for image in images if os.path.splitext(image)[0] not in ads]
 # randomly sample 50 images for analysis
 sampled_images = random.sample(uncoded_images, 10)
-#sampled_images = [images[45]]
 
 sampled_images = ['ad_365774349852854_img.png', 'ad_1117594759672868_4_img.png', 'ad_1351354515801982_img.png', 'ad_724883825637062_img.png', 'ad_1357155365155188_img.png']
 
@@ -153,6 +157,7 @@ my_ads = pd.read_csv("data/validation sample/survey-ai/myads.csv")
 image_columns = [f'Image{i}_ID' for i in range(1, 6)]
 all_image_ids = my_ads[image_columns].values.flatten().tolist()
 
+# convert the dataframe to a long list 
 long_list = []
 
 for i in range(1, 6):
