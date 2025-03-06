@@ -83,7 +83,6 @@ print(f"Response from Ollama: \n {response.response}")
 # pixtral-12b-2409 - free model
 # premium (paid) models: pixtral-large-latest, 
 # rate limit: 1,000,000,000 tokens per month
-import os
 from mistralai import Mistral
 
 api_key = os.environ["MISTRAL_API_KEY"]
@@ -117,6 +116,7 @@ print(chat_response.choices[0].message.content)
 ##################################################################################
 # ========== using Requests ==========
 import random
+api_key = os.environ["MISTRAL_API_KEY"]
 headers = {
     "Authorization": f"Bearer {api_key}",
     "Content-Type": "application/json"
@@ -126,25 +126,25 @@ api_url = "https://api.mistral.ai/v1/chat/completions"
 ad_id = "123"
 ad_creative_bodies = "Try our new burger!"
 page_name = "McDonald's"
-#all_questions = [type_ad]  # Add other categories here if needed
-all_shuffled_questions = random.sample(all_questions, len(all_questions))
-
-shuffled_questions = []
-for main_question in all_shuffled_questions:
-    shuffled_questions.extend(main_question)
 
 temp_image = "ad_186810294481985_img.png"
-
 image_path = os.path.join(image_folder, temp_image)
 base64_image = encode_image(image_path)
 
-messages = [{"role": "system", "content": instructions_1}]
-user_content = [{"type": "text", "text": q[0] + ": " + q[1]} for q in shuffled_questions] 
-user_content.append({"type": "text", "text": "Name of the page running the ad: " + page_name})
-user_content.append({"type": "text", "text": "Ad caption: " + ad_creative_bodies}) 
-user_content.append({"type": "image_url", "image_url": f"data:image/png;base64,{base64_image}"})
+#all_questions = [type_ad]  # Add other categories here if needed
+# all_shuffled_questions = random.sample(all_questions, len(all_questions))
 
-messages.append({"role": "user", "content": user_content})
+# shuffled_questions = []
+# for main_question in all_shuffled_questions:
+#     shuffled_questions.extend(main_question)
+
+# messages = [{"role": "system", "content": instructions_1}]
+# user_content = [{"type": "text", "text": q[0] + ": " + q[1]} for q in shuffled_questions] 
+# user_content.append({"type": "text", "text": "Name of the page running the ad: " + page_name})
+# user_content.append({"type": "text", "text": "Ad caption: " + ad_creative_bodies}) 
+# user_content.append({"type": "image_url", "image_url": f"data:image/png;base64,{base64_image}"})
+
+# messages.append({"role": "user", "content": user_content})
 
 
 ### NEW REFORMATTED PROMPTING OF THE QUESTIONS (not one by one anymore)
@@ -186,4 +186,26 @@ processed_dict, processed_explanation_dict = get_processing_level_new(answer_dic
 target_group, target_group_expl = get_target_group(answer_dict)
 is_alcohol, is_alcohol_expl = get_alcohol(answer_dict)
 
-# git config --global --add safe.directory '//unimaas.nl/users/Employees/P70090005/data/Desktop/phd/ad libraries and brands/AI-validation'
+dict_entry = {
+    "img_id": ad_id,
+    "type_ad": ad_type,
+    "type_ad_expl": ad_type_explanation,
+    "marketing_str": marketing_str,
+    "marketing_str_expl": marketing_str_explanation,
+    "prem_offer": prem_offer,
+    "prem_offer_expl": prem_offer_explanation,
+    "target_group": target_group,
+    "target_group_expl": target_group_expl,
+    "who_cat": who_cat,
+    "who_cat_expl": who_cat_explanation,
+    "is_alcohol": is_alcohol,
+    "is_alcohol_expl": is_alcohol_expl,
+    "speculation": answer_dict["SPECULATION_LEVEL"][0],  # added speculation
+    "speculation_expl": answer_dict["SPECULATION_LEVEL"][1]
+}
+
+# update with the processed dictionary
+dict_entry.update(processed_dict)
+dict_entry.update(processed_explanation_dict)
+print(dict_entry)
+# works but needs some adjustments in processing, for example: 'target_group_expl': 'The ad is targeted at a broad adult audience.\n\n### WHO Food Categories'
