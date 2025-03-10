@@ -124,10 +124,10 @@ headers = {
 api_url = "https://api.mistral.ai/v1/chat/completions"
 
 ad_id = "123"
-ad_creative_bodies = "Try our new burger!"
-page_name = "McDonald's"
+ad_creative_bodies = "'Shop slim, eet lekker op Black Friday🍕 Enkel vandaag: 20% korting op 1 pizza, 30% op 2 en 40% op 3 of meer🍕!" # "Try our new burger!"
+page_name = "Domino's Pizza Belgium"
 
-temp_image = "ad_186810294481985_img.png"
+temp_image = "ad_2016607565369658_img.png" # "ad_186810294481985_img.png"
 image_path = os.path.join(image_folder, temp_image)
 base64_image = encode_image(image_path)
 
@@ -162,7 +162,7 @@ messages.append({"role": "user", "content": user_content})
 ###
 
 payload = {
-    "model": "pixtral-12b-2409",  # free model
+    "model": model,  # free model
     "messages": messages,
     "temperature": 0.01
 }
@@ -209,3 +209,76 @@ dict_entry.update(processed_dict)
 dict_entry.update(processed_explanation_dict)
 print(dict_entry)
 # works but needs some adjustments in processing, for example: 'target_group_expl': 'The ad is targeted at a broad adult audience.\n\n### WHO Food Categories'
+
+
+
+
+##################################################################################
+# ========== USING Transformers ==========
+
+from transformers import AutoProcessor, LlavaForConditionalGeneration, AutoModelForCausalLM 
+import torch
+from PIL import Image
+
+# Llava
+model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", torch_dtype=torch.float16, device_map="auto")
+processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+
+
+conversation = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "url": f"data:image/jpeg;base64,{base64_image}"},
+            {"type": "text", "text": "What is shown in this image?"},
+        ],
+    },
+]
+
+inputs = processor.apply_chat_template(
+    conversation,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt"
+).to(model.device, torch.float16)
+
+start_time = time.time()
+generate_ids = model.generate(**inputs, max_new_tokens=30)
+
+end_time = time.time()
+
+print(f"Time taken to generate response: {end_time - start_time} seconds.\n")
+processor.batch_decode(generate_ids, skip_special_tokens=True)
+
+# Note that the template simply formats your prompt, you still have to tokenize it and obtain pixel values for your images
+
+
+
+
+# a different model: Florence-2-large from Microsoft
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
+torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+
+model = AutoModelForCausalLM.from_pretrained("microsoft/Florence-2-large", torch_dtype=torch_dtype, trust_remote_code=True).to(device)
+processor = AutoProcessor.from_pretrained("microsoft/Florence-2-large", trust_remote_code=True)
+
+prompt = "<OD>"
+
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg?download=true"
+image = Image.open(requests.get(url, stream=True).raw)
+
+inputs = processor(text=prompt, images=image, return_tensors="pt").to(device, torch_dtype)
+
+generated_ids = model.generate(
+    input_ids=inputs["input_ids"],
+    pixel_values=inputs["pixel_values"],
+    max_new_tokens=4096,
+    num_beams=3,
+    do_sample=False
+)
+generated_text = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
+
+parsed_answer = processor.post_process_generation(generated_text, task="<OD>", image_size=(image.width, image.height))
+
+print(parsed_answer)
