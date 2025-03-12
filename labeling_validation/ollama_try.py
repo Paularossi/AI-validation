@@ -6,83 +6,32 @@ import ollama
 import time
 import re
 
-from AI_validation.labeling_validation.WHO_questions import *
+from persistent.AI_validation.labeling_validation.WHO_questions import *
+# if it doesn't see it, run `echo 'export PYTHONPATH="${PYTHONPATH}:/workspace/persistent/AI_validation"' >> ~/.bashrc`
+# then `source ~/.bashrc` (for permanent inclusion)
 
 pattern2 = re.compile(r"\*{1,2}(.*?)\*{1,2}: ([^\n]+?) [–-] (.*?)(?=\n\*|$)", re.DOTALL)
 all_questions = [alcohol, type_ad, marketing_str, premium_offer, who_cat, target_age_group]
-url = "http://localhost:11434/api/generate" # add the local base url
-image_folder = "AI_validation/data/unique_images"
+image_folder = "persistent/AI_validation/data/unique_images"
 images = [file for file in os.listdir(image_folder) if file.lower().endswith(('.jpg', '.jpeg', '.png'))]
 
 def encode_image(image_path):
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
 
-# i downloaded LLaVA (llava:7b), lama
-payload = {
-    "model": "llava:7b", # replace with the model i'm using
-    "messages": [{"role": "user", "content": "What is Python in max 20 words?"}]
-}
 
-response = requests.post(url, json = payload, stream = True) # use stream = True to print the response as it's generated
+##########################################################################
+# ============== TEST GPU ==============
+import torch
+print("CUDA available:", torch.cuda.is_available())
+print("Device count:", torch.cuda.device_count())
+print("Using device:", torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
-if response.status_code == 200:
-    print("Streaming response from Ollama:")
-    for line in response.iter_lines(decode_unicode = True):
-        if line:
-            try:
-                json_data = json.loads(line)
-                
-                # extract and print the message
-                if "message" in json_data and "content" in json_data["message"]:
-                    print(json_data["message"]["content"], end = "")
-                
-            except json.JSONDecodeError:
-                print(f"\nFailed to parse line: {line}")
-
-
-
-
-# ========== USING Ollama LIBRARY ==========
-
-instructions_1 = (
-    "You will be provided with a picture of an online advertisement delivered to Belgium/Netherlands, its corresponding text (which may be in English, French, or Dutch), and the name of the company running the ad. "
-    "You will be given sets of questions of questions about various aspects of the advertisement along with definitions and examples. "
-    "Please answer each question using the exact format: *QUESTION_LABEL*: Yes/No - Brief explanation. Do not include any extra text, greetings, or commentary. "
-    "For example, your answers should look like: *CARTOON*: Yes/No - explanation; *CELEBRITY*: Yes/No - explanation; and so on. Ensure that the question label is between a set of stars. "
-    "Ensure that each answer includes a brief explanation of the features in the image/text that led to your choice. Ensure that you answer all questions. "
-)
-
-# manually start ollama with `ollama serve &` (& runs it in the background)
-# to check if it's running do `ps aux | grep ollama`
-
-client = ollama.Client(host = "http://localhost:11434") # initialize
-model = "llava:7b" # ollama run llava:7b
-prompt = "What is in this image?"
-image_path = os.path.join(image_folder, images[0])
-base64_image = encode_image(image_path)
-
-
-# calculate the time to generate the response
-start_time = time.time()
-response = client.generate(model = model, prompt = prompt, stream=False, format="json",
-                           system="Answer in maximum 10 words.", options={"temperature": 0.01}, images = [base64_image])
-end_time = time.time()
-
-print(f"Time taken to generate response: {end_time - start_time} seconds")
-
-# raise ResponseError(e.response.text, e.response.status_code) from None
-# ollama._types.ResponseError: model requires more system memory (4.8 GiB) than is available (3.8 GiB) (status code: 500)
-
-response = client.generate(model = model, prompt = target_age_group, stream = False, format = "json", system = instructions_1,
-                           options={"temperature": 0.01}, images = [base64_image])
-
-print(f"Response from Ollama: \n {response.response}")
 
 
 ##################################################################################
 
-# ========== MISTRAL AI ==========
+# == FIRST MODEL ========== MISTRAL AI ========== 
 # pixtral-12b-2409 - free model
 # premium (paid) models: pixtral-large-latest, 
 # rate limit: 1,000,000,000 tokens per month
@@ -91,7 +40,7 @@ print(f"Response from Ollama: \n {response.response}")
 import random
 # api_key = os.environ["MISTRAL_API_KEY"]
 api_key = input()
-model = "pixtral-12b-2409"
+mistral_model = "pixtral-12b-2409"
 
 headers = {
     "Authorization": f"Bearer {api_key}",
@@ -122,7 +71,7 @@ messages.append({"role": "user", "content": user_content})
 ###
 
 payload = {
-    "model": model,  # free model
+    "model": mistral_model,  # free model
     "messages": messages,
     "temperature": 0.01
 }
@@ -169,6 +118,62 @@ dict_entry.update(processed_dict)
 dict_entry.update(processed_explanation_dict)
 print(dict_entry)
 # works but needs some adjustments in processing, for example: 'target_group_expl': 'The ad is targeted at a broad adult audience.\n\n### WHO Food Categories'
+##################################################################################
+
+
+
+###### OLLAMA ############################################################################
+# ========== USING Requests ==========
+
+url = "http://localhost:11434/api/chat" # add the local base url
+llava_model = "llava:7b"
+llama_model = "llama3.2-vision:11b"
+
+messages = [
+    {"role": "user", "content": instructions_new},
+    {"role": "user", "content": f"Name of the page running the ad: {page_name}"},
+    {"role": "user", "content": f"Ad caption: {ad_creative_bodies}"},
+    {"role": "user", "content": create_user_content_string(), "images": [base64_image]}
+]
+
+payload = {
+    "model": llama_model,
+    "messages": messages,
+    "stream": False
+}
+
+start_time = time.time()
+response = requests.post(url, json = payload, stream = False) # use stream = True to print the response as it's generated
+end_time = time.time() # took 436 seconds aka around 7-8 mins
+print(response.json())
+print(response.content) # completely ignored the instructions and outputs strange answers
+
+
+
+
+
+# ========== USING Ollama LIBRARY ==========
+
+# manually start ollama with `ollama serve &` (& runs it in the background)
+# to check if it's running do `ps aux | grep ollama`
+
+client = ollama.Client(host = "http://localhost:11434") # initialize
+image_path = os.path.join(image_folder, images[0])
+base64_image = encode_image(image_path)
+
+
+# calculate the time to generate the response
+start_time = time.time()
+response = client.generate(model = llama_model, prompt = create_user_content_string(page_name, ad_creative_bodies), stream=False, format="json",
+                           system=instructions_new, options={"temperature": 0.01}, images = [base64_image]) # remove the json format????
+end_time = time.time()
+
+print(f"Time taken to generate response: {end_time - start_time} seconds") # 188 seconds aka around 3 mins
+print(f"Response from Ollama: \n {response.response}") # better output but still strange, missing answers
+
+
+
+
 
 
 # ========== using Mistral library ========== (not needed)
@@ -203,11 +208,7 @@ print(dict_entry)
 
 
 
-
-
-
-
-
+# =============== OLD CODE ===============
 ##################################################################################
 # ========== USING Transformers ==========
 
@@ -218,7 +219,6 @@ from PIL import Image
 # Llava
 model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", torch_dtype=torch.float16, device_map="auto")
 processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
-
 
 conversation = [
     {
@@ -243,6 +243,6 @@ generate_ids = model.generate(**inputs, max_new_tokens=70)
 
 end_time = time.time()
 
-print(f"Time taken to generate response: {end_time - start_time} seconds.\n")
+print(f"Time taken to generate response: {end_time - start_time} seconds.\n") # 84 seconds
 processor.batch_decode(generate_ids, skip_special_tokens=True)
 

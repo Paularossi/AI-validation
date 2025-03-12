@@ -204,6 +204,47 @@ def create_user_content():
     return user_content
 
 
+def create_user_content_string(page_name, ad_creative_bodies):
+    user_content = ""
+
+    # add ad metadata
+    user_content += f"### Ad Information\n"
+    user_content += f"**Brand Name (Page running the ad)**: {page_name}\n"
+    user_content += f"**Ad Caption**: {ad_creative_bodies}\n\n"
+
+
+    type_ad_text = "### Ad Type: Select exactly ONE category:\n"
+    type_ad_text += "\n".join([f"*{q[0]}*: {q[1]}" for q in type_ad])  # Concatenate all type_ad questions
+    user_content += type_ad_text + "\n\n"
+
+    alcohol_text = "\n".join([f"*{q[0]}*: {q[1]}" for q in alcohol])
+    user_content += alcohol_text + "\n\n"
+
+    marketing_text = "### Marketing Strategies: Select all that apply:\n"
+    marketing_text += "\n".join([f"*{q[0]}*: {q[1]}" for q in marketing_str])
+    user_content += marketing_text + "\n\n"
+
+    premium_text = "### Premium Offers: Select all that apply. Answer 'Yes' for any that are present, and 'No' otherwise.\n"
+    premium_text += "\n".join([f"*{q[0]}*: {q[1]}" for q in premium_offer])
+    user_content += premium_text + "\n\n"
+    
+    age_text = "### Target Age Group: Select exactly ONE category. Answer 'Yes' for one, and 'No' for all others.\n"
+    age_text += "\n".join([f"*{q[0]}*: {q[1]}" for q in target_age_group])
+    user_content += age_text + "\n\n"
+    
+    who_cat_text = "### WHO Food Categories: Select all that apply. Answer 'Yes' for any that are present, and explicitly 'No' for all others.\n"
+    who_cat_text += "\n".join([f"*{q[0]}*: {q[1]}" for q in who_cat])
+    user_content += who_cat_text + "\n\n"
+    
+    processing_text = "### Processing Level Classification: For each selected WHO food category, classify the level of processing. If a category is marked 'No', do not answer.\n"
+    processing_text += "\n".join([f"*{q[0]}_PROCESSING*: What is the level of processing for this item?" for q in who_cat])
+    user_content += processing_text + "\n\n"
+    
+    speculation_text = "\n".join([f"*{q[0]}*: {q[1]}" for q in speculation])
+    user_content += speculation_text + "\n\n"
+
+    return user_content
+
 # Answer Logic:
 
 def get_alcohol(answer_dict):
