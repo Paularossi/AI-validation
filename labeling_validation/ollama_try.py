@@ -6,12 +6,12 @@ import ollama
 import time
 import re
 
-from labeling_validation.WHO_questions import *
+from AI_validation.labeling_validation.WHO_questions import *
 
 pattern2 = re.compile(r"\*{1,2}(.*?)\*{1,2}: ([^\n]+?) [–-] (.*?)(?=\n\*|$)", re.DOTALL)
 all_questions = [alcohol, type_ad, marketing_str, premium_offer, who_cat, target_age_group]
 url = "http://localhost:11434/api/generate" # add the local base url
-image_folder = "data/unique_images"
+image_folder = "AI_validation/data/unique_images"
 images = [file for file in os.listdir(image_folder) if file.lower().endswith(('.jpg', '.jpeg', '.png'))]
 
 def encode_image(image_path):
@@ -20,7 +20,7 @@ def encode_image(image_path):
 
 # i downloaded LLaVA (llava:7b), lama
 payload = {
-    "model": "llava", # replace with the model i'm using
+    "model": "llava:7b", # replace with the model i'm using
     "messages": [{"role": "user", "content": "What is Python in max 20 words?"}]
 }
 
@@ -53,9 +53,11 @@ instructions_1 = (
     "Ensure that each answer includes a brief explanation of the features in the image/text that led to your choice. Ensure that you answer all questions. "
 )
 
+# manually start ollama with `ollama serve &` (& runs it in the background)
+# to check if it's running do `ps aux | grep ollama`
 
 client = ollama.Client(host = "http://localhost:11434") # initialize
-model = "" # ollama run llava:7b, llava-phi3
+model = "llava:7b" # ollama run llava:7b
 prompt = "What is in this image?"
 image_path = os.path.join(image_folder, images[0])
 base64_image = encode_image(image_path)
@@ -78,45 +80,19 @@ response = client.generate(model = model, prompt = target_age_group, stream = Fa
 print(f"Response from Ollama: \n {response.response}")
 
 
+##################################################################################
 
 # ========== MISTRAL AI ==========
 # pixtral-12b-2409 - free model
 # premium (paid) models: pixtral-large-latest, 
 # rate limit: 1,000,000,000 tokens per month
-from mistralai import Mistral
 
-api_key = os.environ["MISTRAL_API_KEY"]
-model = "pixtral-12b-2409"
-
-client = Mistral(api_key=api_key)
-
-image_path = os.path.join(image_folder, images[0])
-base64_image = encode_image(image_path)
-
-chat_response = client.chat.complete(
-    model = model,
-    messages=[
-        {
-            "role": "system",
-            "content": "Answer in maximum 10 words.",
-        },
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "What is in this ad image?"},
-                {"type": "image_url", "image_url": f"data:image/jpeg;base64,{base64_image}"}
-            ],
-        },
-    ],
-)
-
-print(chat_response.choices[0].message.content)
-
-
-##################################################################################
 # ========== using Requests ==========
 import random
-api_key = os.environ["MISTRAL_API_KEY"]
+# api_key = os.environ["MISTRAL_API_KEY"]
+api_key = input()
+model = "pixtral-12b-2409"
+
 headers = {
     "Authorization": f"Bearer {api_key}",
     "Content-Type": "application/json"
@@ -130,22 +106,6 @@ page_name = "Domino's Pizza Belgium"
 temp_image = "ad_2016607565369658_img.png" # "ad_186810294481985_img.png"
 image_path = os.path.join(image_folder, temp_image)
 base64_image = encode_image(image_path)
-
-#all_questions = [type_ad]  # Add other categories here if needed
-# all_shuffled_questions = random.sample(all_questions, len(all_questions))
-
-# shuffled_questions = []
-# for main_question in all_shuffled_questions:
-#     shuffled_questions.extend(main_question)
-
-# messages = [{"role": "system", "content": instructions_1}]
-# user_content = [{"type": "text", "text": q[0] + ": " + q[1]} for q in shuffled_questions] 
-# user_content.append({"type": "text", "text": "Name of the page running the ad: " + page_name})
-# user_content.append({"type": "text", "text": "Ad caption: " + ad_creative_bodies}) 
-# user_content.append({"type": "image_url", "image_url": f"data:image/png;base64,{base64_image}"})
-
-# messages.append({"role": "user", "content": user_content})
-
 
 ### NEW REFORMATTED PROMPTING OF THE QUESTIONS (not one by one anymore)
 user_content = []
@@ -211,6 +171,41 @@ print(dict_entry)
 # works but needs some adjustments in processing, for example: 'target_group_expl': 'The ad is targeted at a broad adult audience.\n\n### WHO Food Categories'
 
 
+# ========== using Mistral library ========== (not needed)
+# from mistralai import Mistral
+
+# api_key = os.environ["MISTRAL_API_KEY"]
+# model = "pixtral-12b-2409"
+
+# client = Mistral(api_key=api_key)
+
+# image_path = os.path.join(image_folder, images[0])
+# base64_image = encode_image(image_path)
+
+# chat_response = client.chat.complete(
+#     model = model,
+#     messages=[
+#         {
+#             "role": "system",
+#             "content": "Answer in maximum 10 words.",
+#         },
+#         {
+#             "role": "user",
+#             "content": [
+#                 {"type": "text", "text": "What is in this ad image?"},
+#                 {"type": "image_url", "image_url": f"data:image/jpeg;base64,{base64_image}"}
+#             ],
+#         },
+#     ],
+# )
+
+# print(chat_response.choices[0].message.content)
+
+
+
+
+
+
 
 
 ##################################################################################
@@ -244,41 +239,10 @@ inputs = processor.apply_chat_template(
 ).to(model.device, torch.float16)
 
 start_time = time.time()
-generate_ids = model.generate(**inputs, max_new_tokens=30)
+generate_ids = model.generate(**inputs, max_new_tokens=70)
 
 end_time = time.time()
 
 print(f"Time taken to generate response: {end_time - start_time} seconds.\n")
 processor.batch_decode(generate_ids, skip_special_tokens=True)
 
-# Note that the template simply formats your prompt, you still have to tokenize it and obtain pixel values for your images
-
-
-
-
-# a different model: Florence-2-large from Microsoft
-device = "cuda:0" if torch.cuda.is_available() else "cpu"
-torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-
-model = AutoModelForCausalLM.from_pretrained("microsoft/Florence-2-large", torch_dtype=torch_dtype, trust_remote_code=True).to(device)
-processor = AutoProcessor.from_pretrained("microsoft/Florence-2-large", trust_remote_code=True)
-
-prompt = "<OD>"
-
-url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg?download=true"
-image = Image.open(requests.get(url, stream=True).raw)
-
-inputs = processor(text=prompt, images=image, return_tensors="pt").to(device, torch_dtype)
-
-generated_ids = model.generate(
-    input_ids=inputs["input_ids"],
-    pixel_values=inputs["pixel_values"],
-    max_new_tokens=4096,
-    num_beams=3,
-    do_sample=False
-)
-generated_text = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
-
-parsed_answer = processor.post_process_generation(generated_text, task="<OD>", image_size=(image.width, image.height))
-
-print(parsed_answer)
