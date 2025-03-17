@@ -1,0 +1,89 @@
+#!/bin/bash
+# to run this script, first make it executable (only once): `chmod +x ./persistent/AI_validation/install2.sh`
+# then run it with `./persistent/AI_validation/install2.sh`
+
+echo "📂 Setting up GPU workspace..."
+
+if [[ ! -z "${CONDA_DIR}" && ! -d "${CONDA_DIR}" ]] ; then
+    echo "Conda not installed, installing it."
+
+    echo "export CONDA_DIR=$CONDA_DIR" >> ~/.zshrc
+    echo "export CONDA_DIR=$CONDA_DIR" >> ~/.bashrc
+
+    # Automatically download the latest release of mambaforge for conda/mamba
+    wget -O Mambaforge-Linux-x86_64.sh https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh
+    chmod +x Mambaforge-Linux-x86_64.sh
+    /bin/bash Mambaforge-Linux-x86_64.sh -f -b -p "${CONDA_DIR}"
+    rm "Mambaforge-Linux-x86_64.sh"
+
+    mamba config --system --set auto_update_conda false
+    mamba config --system --set show_channel_urls true
+
+    # Install Tensorflow
+    mamba install -y tensorflow tensorboard
+    pip install jupyter_tensorboard
+
+else
+    echo "Conda already installed."
+    if ! command -v mamba &> /dev/null
+    then
+        echo "Mamba not installed. Installing it."
+        conda install -y -c conda-forge mamba
+    fi
+fi
+
+
+
+# Install required Python packages
+echo "📦 Installing Python packages..."
+#conda install -y -c torch torchvision transformers openai 
+pip install --upgrade setuptools pip wheel
+pip install torch ollama requests mistralai pillow pandas numpy accelerate openai 
+
+# install the Transformers library with the version made for Gemma 3
+pip install git+https://github.com/huggingface/transformers@v4.49.0-Gemma-3
+
+# nvidia-pyindex is required to fetch additional Python modules from the NVIDIA NGC PyPI repo
+#pip install nvidia-pyindex
+# CUDA runtime package
+#pip install nvidia-cuda-runtime-cu12
+
+# Verify if Ollama is installed
+if ! pgrep -x ollama > /dev/null; then
+    echo "🔽 Installing Ollama..."
+    curl -fsSL https://ollama.com/install.sh | sh
+else
+    echo "✅ Ollama is already installed."
+fi
+
+# Start Ollama automatically if not already running
+if ! pgrep -x ollama > /dev/null; then
+    echo "🚀 Starting Ollama in the background..."
+    nohup ollama serve > /workspace/ollama.log 2>&1 &
+else
+    echo "✅ Ollama is already running."
+fi
+
+sleep 5  # Give it a few seconds to start
+
+# Pull required Ollama models
+echo "🔽 Downloading Ollama models..."
+ollama pull llama3.2-vision:11b
+ollama pull llava:7b
+# ollama pull gemma:7b
+# ollama pull llava-llama3
+# ollama pull bakllava
+
+# Add AI_validation to PYTHONPATH
+if ! grep -q "PYTHONPATH=" ~/.bashrc; then
+    echo 'export PYTHONPATH="/workspace/persistent/AI_validation"' >> ~/.bashrc
+fi
+export PYTHONPATH="/workspace/persistent/AI_validation"
+
+
+# Check if GPU is available
+echo "🔍 Checking GPU availability..."
+python3 -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}')"
+
+echo "✅ Installation complete!"
+ollama list 
