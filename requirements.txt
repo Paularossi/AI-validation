@@ -5,6 +5,7 @@ ollama==0.4.7
 openai==1.66.3
 pandas==2.1.1
 pillow==10.1.0
+qwen_vl_utils==0.0.10
 requests==2.31.0
 torch==2.6.0
-transformers==4.49.0
+torchvision==0.21.0

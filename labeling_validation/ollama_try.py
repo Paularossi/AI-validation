@@ -31,7 +31,6 @@ print("Using device:", torch.device("cuda" if torch.cuda.is_available() else "cp
 
 
 # add a branding question (for outdoor ads for sure), maybe besides
-# meeting on Thursday 
 
 
 ##################################################################################
@@ -156,7 +155,7 @@ payload = {
 start_time = time.time()
 response = requests.post(url, json = payload, stream = False) # use stream = True to print the response as it's generated
 end_time = time.time() # took 436 seconds aka around 7-8 mins
-print(f"Time taken to generate response: {end_time - start_time} seconds") 
+print(f"Time taken to generate response: {end_time - start_time} seconds") # 
 print(response.json())
 print(response.content) # completely ignored the instructions and outputs strange answers
 
@@ -184,89 +183,8 @@ print(f"Response from Ollama: \n {response.response}") # better output but still
 
 
 
-
-
-
-# ========== using Mistral library ========== (not needed)
-# from mistralai import Mistral
-
-# api_key = os.environ["MISTRAL_API_KEY"]
-# model = "pixtral-12b-2409"
-
-# client = Mistral(api_key=api_key)
-
-# image_path = os.path.join(image_folder, images[0])
-# base64_image = encode_image(image_path)
-
-# chat_response = client.chat.complete(
-#     model = model,
-#     messages=[
-#         {
-#             "role": "system",
-#             "content": "Answer in maximum 10 words.",
-#         },
-#         {
-#             "role": "user",
-#             "content": [
-#                 {"type": "text", "text": "What is in this ad image?"},
-#                 {"type": "image_url", "image_url": f"data:image/jpeg;base64,{base64_image}"}
-#             ],
-#         },
-#     ],
-# )
-
-# print(chat_response.choices[0].message.content)
-
-
-
-# =============== OLD CODE ===============
 ##################################################################################
 # ========== USING Transformers ==========
-
-from transformers import AutoProcessor, LlavaForConditionalGeneration, AutoModelForCausalLM 
-import torch
-from PIL import Image
-
-# Llama is not accessible in the EU
-# Llava
-model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", torch_dtype=torch.float16, device_map="auto")
-processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
-
-
-
-conversation = [
-    {
-        "role": "system",
-        "content": [
-            {"type": "text", "text": instructions_new}
-        ]
-    },
-    {
-        "role": "user",
-        "content": [
-            {"type": "image", "url": f"data:image/jpeg;base64,{base64_image}"},
-            {"type": "text", "text": "What is shown in this image?"},
-        ],
-    },
-]
-
-inputs = processor.apply_chat_template(
-    conversation,
-    add_generation_prompt=True,
-    tokenize=True,
-    return_dict=True,
-    return_tensors="pt"
-).to(model.device, torch.float16)
-
-start_time = time.time()
-generate_ids = model.generate(**inputs, max_new_tokens=70)
-
-end_time = time.time()
-
-print(f"Time taken to generate response: {end_time - start_time} seconds.\n") # 84 seconds
-processor.batch_decode(generate_ids, skip_special_tokens=True)
-
-
 
 # =========================================================================
 # Gemma 3 (google) - WORKS!!!!!!!!!!!!!!!!!!
@@ -340,3 +258,142 @@ dict_entry = {
     "speculation_expl": answer_dict["SPECULATION_LEVEL"][1]
 }
 print(dict_entry)
+
+
+
+# =========================================================================
+# Qwen
+
+from transformers import Qwen2_5_VLForConditionalGeneration, AutoTokenizer
+from qwen_vl_utils import process_vision_info
+
+# default: Load the model on the available device(s)
+model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+    "Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+)
+
+# We recommend enabling flash_attention_2 for better acceleration and memory saving, especially in multi-image and video scenarios.
+# model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+#     "Qwen/Qwen2.5-VL-7B-Instruct",
+#     torch_dtype=torch.bfloat16,
+#     attn_implementation="flash_attention_2",
+#     device_map="auto",
+# )
+
+# default processer
+processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct")
+
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "image": f"data:image/jpeg;base64,{base64_image}"},
+            {"type": "text", "text": "What is shown in this image? Describe in max 10 words."},
+        ],
+    }
+]
+
+# Preparation for inference
+text = processor.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True
+)
+
+image_inputs, video_inputs = process_vision_info(messages)
+inputs = processor(
+    text=[text],
+    images=image_inputs,
+    videos=video_inputs,
+    padding=True,
+    return_tensors="pt",
+)
+inputs = inputs.to("cuda")
+
+# Inference: Generation of the output
+generated_ids = model.generate(**inputs, max_new_tokens=128)
+generated_ids_trimmed = [
+    out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+]
+output_text = processor.batch_decode(
+    generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+)
+print(output_text)
+
+
+
+
+
+
+# =============== OLD CODE ===============
+from transformers import AutoProcessor, LlavaForConditionalGeneration, AutoModelForCausalLM 
+from PIL import Image
+
+# Llama is not accessible in the EU
+# Llava
+model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", torch_dtype=torch.float16, device_map="auto")
+processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+
+
+
+conversation = [
+    {
+        "role": "system",
+        "content": [
+            {"type": "text", "text": instructions_new}
+        ]
+    },
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "url": f"data:image/jpeg;base64,{base64_image}"},
+            {"type": "text", "text": "What is shown in this image?"},
+        ],
+    },
+]
+
+inputs = processor.apply_chat_template(
+    conversation,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt"
+).to(model.device, torch.float16)
+
+start_time = time.time()
+generate_ids = model.generate(**inputs, max_new_tokens=70)
+
+end_time = time.time()
+
+print(f"Time taken to generate response: {end_time - start_time} seconds.\n") # 84 seconds
+processor.batch_decode(generate_ids, skip_special_tokens=True)
+
+
+# ========== using Mistral library ========== (not needed)
+# from mistralai import Mistral
+
+# api_key = os.environ["MISTRAL_API_KEY"]
+# model = "pixtral-12b-2409"
+
+# client = Mistral(api_key=api_key)
+
+# image_path = os.path.join(image_folder, images[0])
+# base64_image = encode_image(image_path)
+
+# chat_response = client.chat.complete(
+#     model = model,
+#     messages=[
+#         {
+#             "role": "system",
+#             "content": "Answer in maximum 10 words.",
+#         },
+#         {
+#             "role": "user",
+#             "content": [
+#                 {"type": "text", "text": "What is in this ad image?"},
+#                 {"type": "image_url", "image_url": f"data:image/jpeg;base64,{base64_image}"}
+#             ],
+#         },
+#     ],
+# )
+
+# print(chat_response.choices[0].message.content)

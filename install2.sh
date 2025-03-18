@@ -38,7 +38,7 @@ fi
 echo "📦 Installing Python packages..."
 #conda install -y -c torch torchvision transformers openai 
 pip install --upgrade setuptools pip wheel
-pip install torch ollama requests mistralai pillow pandas numpy accelerate openai 
+pip install torch torchvision ollama requests mistralai pillow pandas numpy accelerate openai qwen_vl_utils
 
 # install the Transformers library with the version made for Gemma 3
 pip install git+https://github.com/huggingface/transformers@v4.49.0-Gemma-3

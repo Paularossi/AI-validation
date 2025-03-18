@@ -22,7 +22,7 @@ instructions_1 = (
 # the questions need: (1) to be mutually exclusive, (2) to have a definition and (3) to give examples
 
 type_ad = [ # make it clear that this question is about the company running the ad
-    ("FOOD_PRODUCT_COMPANY", "This set of questions is about the company running the ad. Is the ad promoting a specific food or drink product from a food/drink manufacturing company or brand, was directly evidenced by the image or text? (e.g. a Coca-cola bottle in someone's hand) "),
+    ("FOOD_PRODUCT_COMPANY", "Is the ad promoting a specific food or drink product from a food/drink manufacturing company or brand, was directly evidenced by the image or text? (e.g. a Coca-cola bottle in someone's hand) "),
     ("FOOD_PRODUCT_NONFOOD_COMPANY", "Is the ad promoting a specific food or drink product but created by a non-food brand/company/retailer/service/event? (e.g. a bank sponsoring free coffee at an event) "),
     ("FOOD_COMPANY_NO_PRODUCT", "Is the ad promoting a food or drink manufacturing company or brand, without showing a specific food or drink product? (e.g. an ad for Nestlé as a brand but not for a specific food or drink) "),
     ("RETAILER_FOOD_PRODUCT", "Is the ad promoting a specific food or drink product from a food or drink retailer? (e.g., a supermarket ad showcasing discounts on fresh produce) "),
@@ -36,7 +36,7 @@ type_ad = [ # make it clear that this question is about the company running the 
 # licensed characters are owned by a specific company, change cartoons to mention "not licensed chars"
 
 marketing_str = [
-    ("OWNED_CARTOON", "This set of questions is about marketing strategies used in the ad. Answer with Yes/No to each question. Are there characters specifically created/owned by a company to represent its brand, often used in advertising and product packaging? These characters help establish brand identity and engage with consumers, especially children (e.g., M&Ms, Dino from the Dino brand) "),
+    ("OWNED_CARTOON", "Are there characters specifically created/owned by a company to represent its brand, often used in advertising and product packaging? These characters help establish brand identity and engage with consumers, especially children (e.g., M&Ms, Dino from the Dino brand) "),
     ("LICENSED_CHARACTER", "Are there well-known characters from TV shows or books that a brand pays to use in its promotions? These characters attract fans and enhance the appeal of products through their existing popularity (e.g., Miffy (Nijntje), Mickey Mouse) "),
     ("OTHER_CHARACTER", "Are there other character types (not owned/licensed) that represent cartoons and are not associated with a company/brand (e.g. cartoon-style animals on a lunchbox) "),
     ("MOVIE_TIE_IN", "Are there promotional strategies that align products or brands with popular films, utilizing themes, characters, or storylines from the movies to attract audiences and enhance product appeal? (e.g., Shrek, Frozen) "),
@@ -49,13 +49,13 @@ marketing_str = [
 ]
 
 target_age_group = [
-    ("CHILD_TARGETED", "This set of questions is about the target age group of the ad. Is the ad targeted at children up to 15 years old? These ads often use simplified messaging, bright colors, and fun or animated characters that resonate with a younger audience. They may feature elements like toys, games, or collectibles and focus on excitement, fun, and social inclusion. The ad may also indirectly appeal to parents by highlighting educational or health benefits. "),
+    ("CHILD_TARGETED", "Is the ad targeted at children up to 15 years old? These ads often use simplified messaging, bright colors, and fun or animated characters that resonate with a younger audience. They may feature elements like toys, games, or collectibles and focus on excitement, fun, and social inclusion. The ad may also indirectly appeal to parents by highlighting educational or health benefits. "),
     ("ADOLESCENT_TARGETED", "Is the ad targeted at adolescents between 16 and 18 years old? These ads often highlight themes of individuality, self-expression, and peer influence. They frequently use influencers, social media trends, or aspirational messaging to appeal to teenagers' desire for autonomy, status, or connection to their peers. "),
     ("ADULT_TARGETED", "Is the ad targeted at adults with no specific focus on children or adolescents? These ads emphasize practical, emotional, or lifestyle benefits relevant to a broad adult audience. Messaging may focus on value, quality, sophistication, or relatable everyday needs. ")
 ]
 
 premium_offer = [
-    ("GAMES", "This set of questions is about premium offers used in the ad. Are there offers that incentivize consumers to download mobile games or apps, often tied to promotions or rewards (e.g. 'download the McDonald's app to receive a free hamburger') "),
+    ("GAMES", "Are there offers that incentivize consumers to download mobile games or apps, often tied to promotions or rewards (e.g. 'download the McDonald's app to receive a free hamburger') "),
     ("CONTESTS", "Are there promotions/contests where consumers enter to win prizes by completing specific actions, often requiring purchase or engagement (e.g., social media photo contests encouraging participants to share picture with a specific product to win prizes). "),
     ("2FOR3", "Are there offers that encourage bulk purchasing by providing extra products for a reduced price? e.g. 1+1 free, 3 for the price of 2 "),
     ("EXTRA", "Are there promotions offering additional product quantity for the same price? e.g. 20%% extra, 50 extra grams free "),
@@ -119,9 +119,9 @@ speculation = [
 instructions_new = (
     "You will be provided with a picture of an online advertisement delivered to Belgium/Netherlands, its corresponding text (which may be in English, French, or Dutch), and the name of the company running the ad. "
     "You will be given sets of questions about various aspects of the advertisement along with definitions and examples. "
-    "Please answer each question using the exact format: *QUESTION_LABEL*: Yes/No - Brief explanation. Do not include any extra text, greetings, or commentary. "
+    "Provide answers in the following format: *QUESTION_LABEL*: Yes/No - Brief explanation. Do not include any extra text, greetings, or commentary. "
     "For example, your answers should look like: *CARTOON*: Yes/No - explanation; *CELEBRITY*: Yes/No - explanation; and so on. Ensure that the question label is between a set of stars. "
-    "Ensure that each answer includes a brief explanation (max. 10 words) of the features in the image/text that led to your choice. Ensure that you answer all questions. "
+    "Ensure that each answer includes an explanation (max 10 words) if Yes. Do not add any greetings or extra text. Ensure that you answer all questions. "
     
     "### Ad Type Classification (Single-Choice - Must Answer Every Question)"
     "Each ad belongs to exactly **one** category. Answer 'Yes' for one category and explicitly 'No' for all others. "
@@ -150,19 +150,19 @@ instructions_new = (
     
     "### WHO Food Categories (Multiple-Choice - Must Answer Every Question)"
     "For each question in this section, answer 'Yes' if the ad features that food item. Answer 'No' otherwise. "
-    "**Do NOT select individual ingredients if the ad features a full meal or composite dish.** Instead, select the most representative category."
+    "**Do NOT list individual ingredients if the ad features a full meal or composite dish.** Instead, select the most representative category."
     "Example: If an ad features a sandwich, select 'READYMADE_CONVENIENCE' and NOT 'Bread' and 'Meat'."
     
-    "### Processing Level Classification (Follow-Up to WHO Food Categories)"
-    "For each WHO food category that is marked 'Yes', immediately provide a follow-up classification for the level of processing. "
-    "Use the following processing levels:"
-    "1. **Unprocessed or minimally processed food** – Natural foods (excluding Alcohol) that have undergone minimal changes (such as cleaning, drying, or freezing) without significant alteration to their nutritional content (e.g., fresh meat, eggs, frozen fruit)."
-    "2. **Processed food** – Foods (excluding Alcohol) that have undergone processes like canning, smoking, fermentation, or preservation, often with added ingredients to extend shelf life or enhance flavor (e.g., canned tomatoes, cheese, bread, smoked meat, dry fish)."
-    "3. **Ultra-processed food** – Formulations of industrial ingredients (excluding Alcohol) that result from a series of industrial processes, such as frying, chemical modifications, or application of additives, containing little or no whole foods (e.g., chips, candy, instant noodles, soft drinks, fast food)."
-    "4. **Processed culinary ingredients** – Substances (excluding Alcohol) extracted or refined from minimally processed foods, typically used in cooking or seasoning (e.g., sugar, butter, oils, spices)."
+    # "### Processing Level Classification (Follow-Up to WHO Food Categories)"
+    # "For each WHO food category that is marked 'Yes', immediately provide a follow-up classification for the level of processing. "
+    # "Use the following processing levels:"
+    # "1. **Unprocessed or minimally processed food** – Natural foods (excluding Alcohol) that have undergone minimal changes (such as cleaning, drying, or freezing) without significant alteration to their nutritional content (e.g., fresh meat, eggs, frozen fruit)."
+    # "2. **Processed food** – Foods (excluding Alcohol) that have undergone processes like canning, smoking, fermentation, or preservation, often with added ingredients to extend shelf life or enhance flavor (e.g., canned tomatoes, cheese, bread, smoked meat, dry fish)."
+    # "3. **Ultra-processed food** – Formulations of industrial ingredients (excluding Alcohol) that result from a series of industrial processes, such as frying, chemical modifications, or application of additives, containing little or no whole foods (e.g., chips, candy, instant noodles, soft drinks, fast food)."
+    # "4. **Processed culinary ingredients** – Substances (excluding Alcohol) extracted or refined from minimally processed foods, typically used in cooking or seasoning (e.g., sugar, butter, oils, spices)."
 
-    "### Example of Response Format: *CHOCOLATE_SUGAR*: Yes – explanation; *CHOCOLATE_SUGAR_PROCESSING*: ULTRA_PROCESSED – explanation"
-    "**Important:** Only provide processing levels for categories marked 'Yes'. Do not add processing levels for 'No' answers."
+    # "### Example of Response Format: *CHOCOLATE_SUGAR*: Yes – explanation; *CHOCOLATE_SUGAR_PROCESSING*: ULTRA_PROCESSED – explanation"
+    # "**Important:** Only provide processing levels for categories marked 'Yes'. Do not add processing levels for 'No' answers."
 )
 
 
@@ -194,9 +194,9 @@ def create_user_content():
     who_cat_text += "\n".join([f"*{q[0]}*: {q[1]}" for q in who_cat])
     user_content.append({"type": "text", "text": who_cat_text})
     
-    processing_text = "### Processing Level Classification: For each selected WHO food category, classify the level of processing. If a category is marked 'No', do not answer.\n"
-    processing_text += "\n".join([f"*{q[0]}_PROCESSING*: What is the level of processing for this item?" for q in who_cat])
-    user_content.append({"type": "text", "text": processing_text})
+    #processing_text = "### Processing Level Classification: For each selected WHO food category, classify the level of processing. If a category is marked 'No', do not answer.\n"
+    #processing_text += "\n".join([f"*{q[0]}_PROCESSING*: What is the level of processing for this item?" for q in who_cat])
+    #user_content.append({"type": "text", "text": processing_text})
     
     speculation_text = "\n".join([f"*{q[0]}*: {q[1]}" for q in speculation])
     user_content.append({"type": "text", "text": speculation_text})
@@ -212,9 +212,8 @@ def create_user_content_string(page_name, ad_creative_bodies):
     user_content += f"**Brand Name (Page running the ad)**: {page_name}\n"
     user_content += f"**Ad Caption**: {ad_creative_bodies}\n\n"
 
-
     type_ad_text = "### Ad Type: Select exactly ONE category:\n"
-    type_ad_text += "\n".join([f"*{q[0]}*: {q[1]}" for q in type_ad])  # Concatenate all type_ad questions
+    type_ad_text += "\n".join([f"*{q[0]}*: {q[1]}" for q in type_ad])  
     user_content += type_ad_text + "\n\n"
 
     alcohol_text = "\n".join([f"*{q[0]}*: {q[1]}" for q in alcohol])
@@ -236,9 +235,9 @@ def create_user_content_string(page_name, ad_creative_bodies):
     who_cat_text += "\n".join([f"*{q[0]}*: {q[1]}" for q in who_cat])
     user_content += who_cat_text + "\n\n"
     
-    processing_text = "### Processing Level Classification: For each selected WHO food category, classify the level of processing. If a category is marked 'No', do not answer.\n"
-    processing_text += "\n".join([f"*{q[0]}_PROCESSING*: What is the level of processing for this item?" for q in who_cat])
-    user_content += processing_text + "\n\n"
+    #processing_text = "### Processing Level Classification: For each selected WHO food category, classify the level of processing. If a category is marked 'No', do not answer.\n"
+    #processing_text += "\n".join([f"*{q[0]}_PROCESSING*: What is the level of processing for this item?" for q in who_cat])
+    #user_content += processing_text + "\n\n"
     
     speculation_text = "\n".join([f"*{q[0]}*: {q[1]}" for q in speculation])
     user_content += speculation_text + "\n\n"
