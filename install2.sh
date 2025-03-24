@@ -38,41 +38,10 @@ fi
 echo "📦 Installing Python packages..."
 #conda install -y -c torch torchvision transformers openai 
 pip install --upgrade setuptools pip wheel
-pip install torch torchvision ollama requests mistralai pillow pandas numpy accelerate openai qwen_vl_utils
+pip install torch torchvision ollama requests mistralai pillow pandas numpy accelerate openai qwen_vl_utils timm einops 
 
 # install the Transformers library with the version made for Gemma 3
 pip install git+https://github.com/huggingface/transformers@v4.49.0-Gemma-3
-
-# nvidia-pyindex is required to fetch additional Python modules from the NVIDIA NGC PyPI repo
-#pip install nvidia-pyindex
-# CUDA runtime package
-#pip install nvidia-cuda-runtime-cu12
-
-# Verify if Ollama is installed
-if ! pgrep -x ollama > /dev/null; then
-    echo "🔽 Installing Ollama..."
-    curl -fsSL https://ollama.com/install.sh | sh
-else
-    echo "✅ Ollama is already installed."
-fi
-
-# Start Ollama automatically if not already running
-if ! pgrep -x ollama > /dev/null; then
-    echo "🚀 Starting Ollama in the background..."
-    nohup ollama serve > /workspace/ollama.log 2>&1 &
-else
-    echo "✅ Ollama is already running."
-fi
-
-sleep 5  # Give it a few seconds to start
-
-# Pull required Ollama models
-echo "🔽 Downloading Ollama models..."
-ollama pull llama3.2-vision:11b
-ollama pull llava:7b
-# ollama pull gemma:7b
-# ollama pull llava-llama3
-# ollama pull bakllava
 
 # Add AI_validation to PYTHONPATH
 if ! grep -q "PYTHONPATH=" ~/.bashrc; then
@@ -86,4 +55,3 @@ echo "🔍 Checking GPU availability..."
 python3 -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}')"
 
 echo "✅ Installation complete!"
-ollama list 
