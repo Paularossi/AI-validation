@@ -1,3 +1,8 @@
+import re
+
+pattern_api = re.compile(r"\*{1,2}(.*?)\*{1,2}: ([^\n]+?) [–-] (.*?)(?=\n\*|$)", re.DOTALL)
+pattern_aya = re.compile(r"\*{1,2}(.*?)\*{1,2}:\s*([^\n–-]+?)\s*[–-]\s*(.*?)(?=\n\*|$)", re.DOTALL) 
+# this one could also work for the API regex
 
 instructions_1 = (
     "You will be provided with a picture of an online advertisement delivered to Belgium/Netherlands, its corresponding text (which may be in English, French, or Dutch), and the name of the company running the ad. "
@@ -123,9 +128,9 @@ instructions_new = (
     "For example, your answers should look like: *CARTOON*: Yes/No - explanation; *CELEBRITY*: Yes/No - explanation; and so on. Ensure that the question label is between a set of stars. "
     "Ensure that each answer includes an explanation (max 10 words) if Yes. Do not add any greetings or extra text. Ensure that you answer all questions. "
     
-    "### Ad Type Classification (Single-Choice - Must Answer Every Question)"
+    "### Ad Type Classification (Single-Choice - Must Answer Every Question) "
     "Each ad belongs to exactly **one** category. Answer 'Yes' for one category and explicitly 'No' for all others. "
-    "Refer to the definitions below when selecting the correct category."
+    "Refer to the definitions below when selecting the correct category. "
 
     "**Definitions for Ad Type Classification:** "
     "1. **Food/drink manufacturing company or brand** – A company that produces and processes food or drinks, primarily for sale through retailers. Manufacturers do not sell directly to consumers. "
@@ -135,37 +140,46 @@ instructions_new = (
     "3. **Restaurant/takeaway/delivery outlet** – A food service establishment preparing and selling ready-to-eat meals for immediate consumption. "
        "Example: A McDonald’s ad promoting a new burger. "
 
-    "### Marketing Strategies (Multiple-Choice - Must Answer Every Question)"
+    "### Alcohol Presence "
+    "Answer 'Yes' if you see the presence of alcoholic drinks or alcoholic brands in the ad. "
+
+    "### Marketing Strategies (Multiple-Choice - Must Answer Every Question) "
     "For each question in this section, answer 'Yes' if the marketing strategy is present in the ad. Answer 'No' otherwise. "
-    "You can select multiple options, but every category must be explicitly answered."
+    "You can select multiple options, but every category must be explicitly answered. "
 
-    "### Premium Offers (Multiple-Choice - Must Answer Every Question)"
+    "### Premium Offers (Multiple-Choice - Must Answer Every Question) "
     "For each question in this section, answer 'Yes' if the premium offer is included in the ad. Answer 'No' otherwise. "
-    "You can select multiple options, but every category must be explicitly answered."
+    "You can select multiple options, but every category must be explicitly answered. "
 
-    "### Target Age Group (Single-Choice - Must Answer Every Question)"
-    "You **must select exactly one category** in this section. Answer 'Yes' for one category and 'No' for all others."
-    "If multiple seem relevant, select the primary audience based on the ad's design, language, and messaging."
-    "Every category in this section **must** be answered."
+    "### Target Age Group (Single-Choice - Must Answer Every Question) "
+    "You **must select exactly one category** in this section. Answer 'Yes' for one category and 'No' for all others. "
+    "If multiple seem relevant, select the primary audience based on the ad's design, language, and messaging. "
+    "Every category in this section **must** be answered. "
     
-    "### WHO Food Categories (Multiple-Choice - Must Answer Every Question)"
+    "### WHO Food Categories (Multiple-Choice - Must Answer Every Question) "
     "For each question in this section, answer 'Yes' if the ad features that food item. Answer 'No' otherwise. "
-    "**Do NOT list individual ingredients if the ad features a full meal or composite dish.** Instead, select the most representative category."
-    "Example: If an ad features a sandwich, select 'READYMADE_CONVENIENCE' and NOT 'Bread' and 'Meat'."
-    
-    # "### Processing Level Classification (Follow-Up to WHO Food Categories)"
-    # "For each WHO food category that is marked 'Yes', immediately provide a follow-up classification for the level of processing. "
-    # "Use the following processing levels:"
-    # "1. **Unprocessed or minimally processed food** – Natural foods (excluding Alcohol) that have undergone minimal changes (such as cleaning, drying, or freezing) without significant alteration to their nutritional content (e.g., fresh meat, eggs, frozen fruit)."
-    # "2. **Processed food** – Foods (excluding Alcohol) that have undergone processes like canning, smoking, fermentation, or preservation, often with added ingredients to extend shelf life or enhance flavor (e.g., canned tomatoes, cheese, bread, smoked meat, dry fish)."
-    # "3. **Ultra-processed food** – Formulations of industrial ingredients (excluding Alcohol) that result from a series of industrial processes, such as frying, chemical modifications, or application of additives, containing little or no whole foods (e.g., chips, candy, instant noodles, soft drinks, fast food)."
-    # "4. **Processed culinary ingredients** – Substances (excluding Alcohol) extracted or refined from minimally processed foods, typically used in cooking or seasoning (e.g., sugar, butter, oils, spices)."
+    "**Do NOT list individual ingredients if the ad features a full meal or composite dish.** Instead, select the most representative category. "
+    "Example: If an ad features a sandwich, select 'READYMADE_CONVENIENCE' and NOT 'Bread' and 'Meat'. "
 
-    # "### Example of Response Format: *CHOCOLATE_SUGAR*: Yes – explanation; *CHOCOLATE_SUGAR_PROCESSING*: ULTRA_PROCESSED – explanation"
-    # "**Important:** Only provide processing levels for categories marked 'Yes'. Do not add processing levels for 'No' answers."
+    # "**IMPORTANT: If you answer 'Yes' for a category, you MUST immediately follow it with a second line specifying the processing level.** "
+    # "Use this format for processing: *<QUESTION_LABEL>_PROCESSING*: <Processing Level> – explanation. "
+    # "Do NOT provide processing levels for categories marked 'No'. "
+    # "Use the following processing levels: "
+    # "1. **UNPROCESSED** – Natural foods (excluding Alcohol) that have undergone minimal changes (such as cleaning, drying, or freezing) without significant alteration to their nutritional content (e.g., fresh meat, eggs, frozen fruit). "
+    # "2. **PROCESSED** – Foods (excluding Alcohol) that have undergone processes like canning, smoking, fermentation, or preservation, often with added ingredients to extend shelf life or enhance flavor (e.g., canned tomatoes, cheese, bread, smoked meat, dry fish). "
+    # "3. **ULTRA-PROCESSED** – Formulations of industrial ingredients (excluding Alcohol) that result from a series of industrial processes, such as frying, chemical modifications, or application of additives, containing little or no whole foods (e.g., chips, candy, instant noodles, soft drinks, fast food). "
+    # "4. **INGREDIENTS** – Substances (excluding Alcohol) extracted or refined from minimally processed foods, typically used in cooking or seasoning (e.g., sugar, butter, oils, spices). "
+    # "5. **NA_PROCESSING** - The ad does not depict any food or beverage and the processing level is therefore non-applicable. "
+
+    # "### Example of Response Format: *CHOCOLATE_SUGAR*: Yes – explanation; *CHOCOLATE_SUGAR_PROCESSING*: ULTRA_PROCESSED – explanation "
+    # "**Important:** Only provide processing levels for categories marked 'Yes'. Do not add processing levels for 'No' answers. "
+
+    "At the end, double-check that every question label is answered explicitly with either 'Yes' or 'No'. Any missing label will be treated as an incomplete answer. "
+    "### Output Example: "
+    "*FOOD_PRODUCT_COMPANY*: Yes – Promotes a Coca-cola bottle "
+    "*FOOD_PRODUCT_NONFOOD_COMPANY*: No – Not shown "
+    "*FOOD_COMPANY_NO_PRODUCT*: No – Not shown ..."
 )
-
-
 
 def create_user_content():
     user_content = []
@@ -175,7 +189,8 @@ def create_user_content():
     type_ad_text += "\n".join([f"*{q[0]}*: {q[1]}" for q in type_ad])  # Concatenate all type_ad questions
     user_content.append({"type": "text", "text": type_ad_text})
     
-    alcohol_text = "\n".join([f"*{q[0]}*: {q[1]}" for q in alcohol])
+    alcohol_text = "### Alcohol presence: answer with Yes/No.\n"
+    alcohol_text += "\n".join([f"*{q[0]}*: {q[1]}" for q in alcohol])
     user_content.append({"type": "text", "text": alcohol_text})
     
     marketing_text = "### Marketing Strategies: Select all that apply. Answer 'Yes' for any that are present, and 'No' otherwise.\n"
@@ -198,53 +213,15 @@ def create_user_content():
     #processing_text += "\n".join([f"*{q[0]}_PROCESSING*: What is the level of processing for this item?" for q in who_cat])
     #user_content.append({"type": "text", "text": processing_text})
     
-    speculation_text = "\n".join([f"*{q[0]}*: {q[1]}" for q in speculation])
+    speculation_text = "### Speculation Level: Rate from 0-10.\n"
+    speculation_text += "\n".join([f"*{q[0]}*: {q[1]}" for q in speculation])
     user_content.append({"type": "text", "text": speculation_text})
-        
+    
     return user_content
 
 
-def create_user_content_string(page_name, ad_creative_bodies):
-    user_content = ""
+# ============ Answer Logic: ============
 
-    # add ad metadata
-    user_content += f"### Ad Information\n"
-    user_content += f"**Brand Name (Page running the ad)**: {page_name}\n"
-    user_content += f"**Ad Caption**: {ad_creative_bodies}\n\n"
-
-    type_ad_text = "### Ad Type: Select exactly ONE category:\n"
-    type_ad_text += "\n".join([f"*{q[0]}*: {q[1]}" for q in type_ad])  
-    user_content += type_ad_text + "\n\n"
-
-    alcohol_text = "\n".join([f"*{q[0]}*: {q[1]}" for q in alcohol])
-    user_content += alcohol_text + "\n\n"
-
-    marketing_text = "### Marketing Strategies: Select all that apply:\n"
-    marketing_text += "\n".join([f"*{q[0]}*: {q[1]}" for q in marketing_str])
-    user_content += marketing_text + "\n\n"
-
-    premium_text = "### Premium Offers: Select all that apply. Answer 'Yes' for any that are present, and 'No' otherwise.\n"
-    premium_text += "\n".join([f"*{q[0]}*: {q[1]}" for q in premium_offer])
-    user_content += premium_text + "\n\n"
-    
-    age_text = "### Target Age Group: Select exactly ONE category. Answer 'Yes' for one, and 'No' for all others.\n"
-    age_text += "\n".join([f"*{q[0]}*: {q[1]}" for q in target_age_group])
-    user_content += age_text + "\n\n"
-    
-    who_cat_text = "### WHO Food Categories: Select all that apply. Answer 'Yes' for any that are present, and explicitly 'No' for all others.\n"
-    who_cat_text += "\n".join([f"*{q[0]}*: {q[1]}" for q in who_cat])
-    user_content += who_cat_text + "\n\n"
-    
-    #processing_text = "### Processing Level Classification: For each selected WHO food category, classify the level of processing. If a category is marked 'No', do not answer.\n"
-    #processing_text += "\n".join([f"*{q[0]}_PROCESSING*: What is the level of processing for this item?" for q in who_cat])
-    #user_content += processing_text + "\n\n"
-    
-    speculation_text = "\n".join([f"*{q[0]}*: {q[1]}" for q in speculation])
-    user_content += speculation_text + "\n\n"
-
-    return user_content
-
-# Answer Logic:
 
 def get_alcohol(answer_dict):
     if answer_dict["ALCOHOL"][0] == "Yes":
@@ -612,3 +589,64 @@ def get_processing_level_new(answer_dict, who_cat_text, who_cat):
         proc_exp_dict[f"processed_explanation_{code}"] = explanations[i]
         
     return proc_dict, proc_exp_dict
+
+
+# in case some questions were not answered
+def process_missing_output(response, expected_labels):
+    if isinstance(response, list):
+        response = response[0]
+
+    extracted = {label.strip(): {"answer": answer, "explanation": explanation.strip() if explanation else ""}
+        for label, answer, explanation in pattern_aya.findall(response)}
+
+    full_output = {}
+    for label in expected_labels:
+        if label in extracted:
+            full_output[label] = extracted[label]
+        else:
+            full_output[label] = {"answer": "MISSING", "explanation": ""}
+
+    answer_dict = {label: [data["answer"], data["explanation"]] for label, data in full_output.items()}
+
+    return answer_dict
+
+
+# should technically work for all models, if their output has been processed properly
+def get_final_dict_entry(answer_dict, ad_id):
+
+    ad_type, ad_type_explanation = get_ad_type(answer_dict)
+    marketing_str, marketing_str_explanation = get_marketing_strategy(answer_dict)
+    prem_offer, prem_offer_explanation = get_premium_offer(answer_dict)
+    who_cat, who_cat_explanation, who_cat_text = get_who_cat(answer_dict)
+    target_group, target_group_expl = get_target_group(answer_dict)
+    is_alcohol, is_alcohol_expl = get_alcohol(answer_dict)
+                                
+    dict_entry = {
+        "img_id": ad_id,
+        "type_ad": ad_type,
+        "type_ad_expl": ad_type_explanation,
+        "marketing_str": marketing_str,
+        "marketing_str_expl": marketing_str_explanation,
+        "prem_offer": prem_offer,
+        "prem_offer_expl": prem_offer_explanation,
+        "target_group": target_group,
+        "target_group_expl": target_group_expl,
+        "who_cat": who_cat,
+        "who_cat_expl": who_cat_explanation,
+        "is_alcohol": is_alcohol,
+        "is_alcohol_expl": is_alcohol_expl,
+        "speculation": answer_dict["SPECULATION_LEVEL"][0], # added speculation
+        "speculation_expl": answer_dict["SPECULATION_LEVEL"][1]
+    }
+
+    # update with the processed dictionary
+    try:
+        processed_dict, processed_explanation_dict = get_processing_level_new(answer_dict, who_cat_text, who_cat) # unlike the rest, this is a dict
+        dict_entry.update(processed_dict)
+        dict_entry.update(processed_explanation_dict)
+    except Exception as e:
+        print(f"Couldn't retrieve the processing levels: {e}")    
+
+    print(dict_entry) 
+
+    return dict_entry

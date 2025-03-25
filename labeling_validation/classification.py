@@ -8,7 +8,7 @@ import random
 import torch
 from PIL import Image
 
-import openai
+from openai import OpenAI
 from huggingface_hub import login
 from transformers import AutoModelForImageTextToText, Gemma3ForConditionalGeneration, AutoProcessor, LlavaForConditionalGeneration, AutoModelForCausalLM, Qwen2_5_VLForConditionalGeneration
 from qwen_vl_utils import process_vision_info
@@ -20,11 +20,15 @@ from persistent.AI_validation.labeling_validation.WHO_questions import *
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
-TEXT_MODELS = ["google/gemma-3-12b-it", "CohereForAI/aya-vision-32b"]
+TEXT_MODELS = ["google/gemma-3-4b-it", "CohereForAI/aya-vision-8b"]
 MULTIMODAL_MODELS = ["Qwen/Qwen2.5-VL-7B-Instruct", "mistralai/Pixtral-12B-2409"]
 
-pattern2 = re.compile(r"\*{1,2}(.*?)\*{1,2}: ([^\n]+?) [–-] (.*?)(?=\n\*|$)", re.DOTALL)
+pattern_api = re.compile(r"\*{1,2}(.*?)\*{1,2}: ([^\n]+?) [–-] (.*?)(?=\n\*|$)", re.DOTALL)
+pattern_aya = re.compile(r"\*{1,2}(.*?)\*{1,2}:\s*(Yes|No)(?:\s*[–-]\s*(.*?))?(?=\n\*|$)", re.DOTALL)
+
 all_questions = [alcohol, type_ad, marketing_str, premium_offer, who_cat, target_age_group]
+expected_labels = [label for section in all_questions for (label, _) in section] + ['SPECULATION_LEVEL'] # all question labels
+
 image_folder = "persistent/AI_validation/data/unique_images"
 images = [file for file in os.listdir(image_folder) if file.lower().endswith(('.jpg', '.jpeg', '.png'))]
 
@@ -51,8 +55,8 @@ base64_image = encode_image(image_path)
 
 # =============== APIs ===============
 
-# === add GPT-40 ===
-client = OpenAI()
+# === add GPT-4o ===
+#client = OpenAI()
 openai_model_id = "gpt-4o"
 openai_api_url = "https://api.openai.com/v1/chat/completions"
 openai_api_key = json_data["openai"]
@@ -66,8 +70,7 @@ mistral_api_key = json_data["mistralai"]
 # for mistral ai and gpt-4o
 def start_classification_apis(model_id, api_key, api_url):
     print(f"Classifying using model {model_id}...")
-    all_questions = [alcohol, type_ad, marketing_str, premium_offer, who_cat, target_age_group]
-
+    
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
@@ -129,10 +132,9 @@ def initiate_transformers_model(model_id):
     """Load the right model and processor based on model_id."""
     # available models
     MODEL_MAP = { # try bigger
-        "google/gemma-3-12b-it": Gemma3ForConditionalGeneration, # Gemma3 - https://huggingface.co/google/gemma-3-12b-it
-        #"llava-hf/llava-1.5-7b-hf": LlavaForConditionalGeneration, # Llava - https://huggingface.co/llava-hf/llava-1.5-7b-hf 
+        "google/gemma-3-4b-it": Gemma3ForConditionalGeneration, # Gemma3 - https://huggingface.co/google/gemma-3-12b-it
         "Qwen/Qwen2.5-VL-7B-Instruct": Qwen2_5_VLForConditionalGeneration, # Qwen - https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct
-        "CohereForAI/aya-vision-32b": AutoModelForImageTextToText # Aya Vision - https://huggingface.co/CohereForAI/aya-vision-8b
+        "CohereForAI/aya-vision-8b": AutoModelForImageTextToText # Aya Vision - https://huggingface.co/CohereForAI/aya-vision-8b
     }
 
     if model_id not in MODEL_MAP:
@@ -147,13 +149,11 @@ def initiate_transformers_model(model_id):
     return model, processor
 
 
-def start_classification_trns(model_id):
-
-    # initiate the right model and processor
-    model, processor = initiate_transformers_model(model_id)
+def start_classification_trns(model, processor, model_id):
+    
     if model is None:
         return None
-    
+
     # load the instructions and questions
     messages = [{"role": "system", "content": [{"type": "text", "text": instructions_new}]}]
     user_content = create_user_content()
@@ -162,8 +162,8 @@ def start_classification_trns(model_id):
     user_content.extend([
         {"type": "text", "text": f"Name of the page running the ad: {page_name}"},
         {"type": "text", "text": f"Ad caption: {ad_creative_bodies}"},
-        #{"type": "image", "image": base64_image}
-        {"type": "image", "image": image_path}
+        #{"type": "image", "image": base64_image} # for qwen
+        {"type": "image", "image": image_path} # for aya
         #{"type": "image_url", "image_url": f"data:image/png;base64,{base64_image}"}
     ])
     messages.append({"role": "user", "content": user_content})
@@ -185,14 +185,18 @@ def start_classification_trns(model_id):
         ).to(model.device)
         # use padding to make sure all inputs are the same length (pytorch can't create a tensor otherwise)
 
+    print(f"Starting classification with model {model_id}...")
     start_time = time.time()
     # generate the response (regardless the model)
     with torch.inference_mode(): # optimize inference by disabling gradient calculations to save memory and speed up processing
-        generation = model.generate(**inputs, max_new_tokens=3000, do_sample=False, # deterministic generation (not random)
+        generation = model.generate(**inputs, max_new_tokens=1300, do_sample=False, # deterministic generation (not random)
             temperature = 0.1)
 
     end_time = time.time() 
-    print(f"Time taken to generate response: {end_time - start_time} seconds") # 
+    print(f"Time taken to generate response: {end_time - start_time:.2f} seconds") 
+    print(f"CUDA memory: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+
+    torch.cuda.empty_cache() # free unused memory
 
     # decode the response based on the ml being used
     if model_id in MULTIMODAL_MODELS:
@@ -201,31 +205,43 @@ def start_classification_trns(model_id):
         response = processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         print(response) 
     else:
-        response = processor.decode(generation[0][input_len:], skip_special_tokens=True) # for gemma
+        response = processor.decode(generation[0][input_len:], skip_special_tokens=True) # for gemma and aya
         print(response) 
 
     return response
 
 
-model_id = TEXT_MODELS[0]
-model_id = MULTIMODAL_MODELS[1]
+# for aya (different regex) - since it doesn't answer each question, check which labels are missing - NOT TRUE WITH UPDATED INSTRUCTIONS
+model_id = TEXT_MODELS[1]
+model, processor = initiate_transformers_model(model_id) # initiate the right model and processor
 
-start_classification_trns(model_id)
+response = start_classification_trns(model, processor, model_id)
+answer_dict = process_missing_output(response, expected_labels)
+temp = get_final_dict_entry(answer_dict, ad_id)
+
+# for Qwen
+model_id = MULTIMODAL_MODELS[0]
+model, processor = initiate_transformers_model(model_id) # initiate the right model and processor
+
+
+
+## APIs:
 response = start_classification_apis(openai_model_id, openai_api_key, openai_api_url)
-response2 = start_classification_apis(mistral_model_id, mistral_api_key, mistral_api_url)
-
 answers = response.json()['choices'][0]['message']['content']
-answer_dict = {match[0].strip(): (match[1].strip(), match[2].strip()) for match in pattern2.findall(answers)}
+answer_dict = {match[0].strip(): (match[1].strip(), match[2].strip()) for match in pattern_api.findall(answers)}
+temp = get_final_dict_entry(answer_dict, ad_id)
 
+response2 = start_classification_apis(mistral_model_id, mistral_api_key, mistral_api_url)
 answers2 = response2.json()['choices'][0]['message']['content']
-answer_dict2 = {match[0].strip(): (match[1].strip(), match[2].strip()) for match in pattern2.findall(answers2)}
+answer_dict2 = {match[0].strip(): (match[1].strip(), match[2].strip()) for match in pattern_api.findall(answers2)}
+temp2 = get_final_dict_entry(answer_dict2, ad_id)
 
 
 # best models
 # 1. Gemma3-4b (6 min), 12b (29 mins), 27b (30 mins)
 # 2. Qwen2.5-7b (2 min), 72b very slow (71 minutes) but better output format
-# 3. MistralAI via API, 12b (14 sec)
-# 4. Aya Vision-8b (20 sec), 32b (12 mins)
+# 3. Aya Vision-8b (20 sec), 32b (12 mins)
+# 4. MistralAI via API, 12b (14 sec)
 # 5. GPT-4o (18 sec)
 
 # Qwen example output: (quite fast, 5-6 seconds)
