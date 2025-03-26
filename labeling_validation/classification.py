@@ -5,6 +5,7 @@ import os
 import time
 import re
 import random
+import pandas as pd
 import torch
 from PIL import Image
 
@@ -15,21 +16,22 @@ from qwen_vl_utils import process_vision_info
 
 from persistent.AI_validation.labeling_validation.WHO_questions import *
 
+# run this file in the terminal with `nohup python3 -m persistent.AI_validation.labeling_validation.classification`
 
 # use the GPU if available
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
-TEXT_MODELS = ["google/gemma-3-4b-it", "CohereForAI/aya-vision-8b"]
+TEXT_MODELS = ["google/gemma-3-12b-it", "CohereForAI/aya-vision-8b"]
 MULTIMODAL_MODELS = ["Qwen/Qwen2.5-VL-7B-Instruct", "mistralai/Pixtral-12B-2409"]
+API_MODELS = ["gpt-4o", "pixtral-12b-2409"]
 
-pattern_api = re.compile(r"\*{1,2}(.*?)\*{1,2}: ([^\n]+?) [–-] (.*?)(?=\n\*|$)", re.DOTALL)
-pattern_aya = re.compile(r"\*{1,2}(.*?)\*{1,2}:\s*(Yes|No)(?:\s*[–-]\s*(.*?))?(?=\n\*|$)", re.DOTALL)
+AD_PATTERN = re.compile(r"(.+?)\.(png|jpeg|jpg)")
 
 all_questions = [alcohol, type_ad, marketing_str, premium_offer, who_cat, target_age_group]
 expected_labels = [label for section in all_questions for (label, _) in section] + ['SPECULATION_LEVEL'] # all question labels
 
-image_folder = "persistent/AI_validation/data/unique_images"
+image_folder = "persistent/AI_validation/data/unique_images" # all the images
 images = [file for file in os.listdir(image_folder) if file.lower().endswith(('.jpg', '.jpeg', '.png'))]
 
 # read the keys
@@ -38,24 +40,11 @@ with open('persistent/AI_validation/keys.txt') as f:
 
 hugg_key = json_data["huggingface"]
 
-def encode_image(image_path):
-    with open(image_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode("utf-8")
-
-
-# change this later to do a set of images
-ad_id = "123"
-ad_creative_bodies = "'Shop slim, eet lekker op Black Friday🍕 Enkel vandaag: 20% korting op 1 pizza, 30% op 2 en 40% op 3 of meer🍕!"
-page_name = "Domino's Pizza Belgium"
-
-temp_image = "ad_2016607565369658_img.png" # "ad_186810294481985_img.png"
-image_path = os.path.join(image_folder, temp_image)
-base64_image = encode_image(image_path)
 
 
 # =============== APIs ===============
 
-# === add GPT-4o ===
+# === GPT-4o ===
 #client = OpenAI()
 openai_model_id = "gpt-4o"
 openai_api_url = "https://api.openai.com/v1/chat/completions"
@@ -67,15 +56,20 @@ mistral_api_url = "https://api.mistral.ai/v1/chat/completions"
 mistral_api_key = json_data["mistralai"]
 
 
+def encode_image(image_path):
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode("utf-8")
+
 # for mistral ai and gpt-4o
-def start_classification_apis(model_id, api_key, api_url):
-    print(f"Classifying using model {model_id}...")
+def start_classification_apis(model_id, api_key, api_url, image_path, ad_creative_bodies, page_name):
+    print(f'======== Labeling image: {image_path}. ========\n')
     
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
     }
 
+    base64_image = encode_image(image_path)
     image_url = f"data:image/jpeg;base64,{base64_image}"
     user_content = []
     messages = [{"role": "system", "content": instructions_1 if model_id == "gpt-4o" else instructions_new}]
@@ -115,13 +109,16 @@ def start_classification_apis(model_id, api_key, api_url):
     start_time = time.time()
     response = requests.post(api_url, headers = headers, json = payload)
     end_time = time.time() 
-    print(f"Time taken to generate response: {end_time - start_time} seconds") # 18 seconds with gpu
+    response_time = end_time - start_time
+    print(f"Time taken to generate response: {response_time:.2f} seconds") # 18 seconds with gpu
+    print(f"CUDA memory: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
 
+    torch.cuda.empty_cache() # free unused memory
     print(response.json()) # for gpt-4o, this format doesn't work!!!! change the instructions?
 
     print(f"Done classifying using model {model_id}!!! YAYYYY !!!!")
 
-    return response
+    return response, response_time
 
 
 
@@ -132,7 +129,7 @@ def initiate_transformers_model(model_id):
     """Load the right model and processor based on model_id."""
     # available models
     MODEL_MAP = { # try bigger
-        "google/gemma-3-4b-it": Gemma3ForConditionalGeneration, # Gemma3 - https://huggingface.co/google/gemma-3-12b-it
+        "google/gemma-3-12b-it": Gemma3ForConditionalGeneration, # Gemma3 - https://huggingface.co/google/gemma-3-12b-it
         "Qwen/Qwen2.5-VL-7B-Instruct": Qwen2_5_VLForConditionalGeneration, # Qwen - https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct
         "CohereForAI/aya-vision-8b": AutoModelForImageTextToText # Aya Vision - https://huggingface.co/CohereForAI/aya-vision-8b
     }
@@ -149,11 +146,11 @@ def initiate_transformers_model(model_id):
     return model, processor
 
 
-def start_classification_trns(model, processor, model_id):
-    
-    if model is None:
-        return None
+def start_classification_trns(model, processor, model_id, image_path, ad_creative_bodies, page_name):
 
+    print(f'======== Labeling image: {image_path}. ========\n')
+
+    base64_image = encode_image(image_path) # for gemma
     # load the instructions and questions
     messages = [{"role": "system", "content": [{"type": "text", "text": instructions_new}]}]
     user_content = create_user_content()
@@ -163,8 +160,8 @@ def start_classification_trns(model, processor, model_id):
         {"type": "text", "text": f"Name of the page running the ad: {page_name}"},
         {"type": "text", "text": f"Ad caption: {ad_creative_bodies}"},
         #{"type": "image", "image": base64_image} # for qwen
-        {"type": "image", "image": image_path} # for aya
-        #{"type": "image_url", "image_url": f"data:image/png;base64,{base64_image}"}
+        {"type": "image_url", "image_url": f"data:image/png;base64,{base64_image}"} # Gemma
+            if model_id.startswith("google") else {"type": "image", "image": image_path} # aya (and qwen?)
     ])
     messages.append({"role": "user", "content": user_content})
 
@@ -185,15 +182,15 @@ def start_classification_trns(model, processor, model_id):
         ).to(model.device)
         # use padding to make sure all inputs are the same length (pytorch can't create a tensor otherwise)
 
-    print(f"Starting classification with model {model_id}...")
     start_time = time.time()
     # generate the response (regardless the model)
     with torch.inference_mode(): # optimize inference by disabling gradient calculations to save memory and speed up processing
         generation = model.generate(**inputs, max_new_tokens=1300, do_sample=False, # deterministic generation (not random)
             temperature = 0.1)
 
-    end_time = time.time() 
-    print(f"Time taken to generate response: {end_time - start_time:.2f} seconds") 
+    end_time = time.time()
+    response_time = end_time - start_time
+    print(f"Time taken to generate response: {response_time:.2f} seconds") 
     print(f"CUDA memory: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
 
     torch.cuda.empty_cache() # free unused memory
@@ -208,33 +205,85 @@ def start_classification_trns(model, processor, model_id):
         response = processor.decode(generation[0][input_len:], skip_special_tokens=True) # for gemma and aya
         print(response) 
 
-    return response
+    return response, response_time
 
 
-# for aya (different regex) - since it doesn't answer each question, check which labels are missing - NOT TRUE WITH UPDATED INSTRUCTIONS
-model_id = TEXT_MODELS[1]
-model, processor = initiate_transformers_model(model_id) # initiate the right model and processor
+def label_images(images, captions, model_id, api_key=None, api_url=None):
+    model, processor = None, None # define them first, in case we don't need them (for apis)
+    
+    if model_id not in API_MODELS: # transformers models
+        model, processor = initiate_transformers_model(model_id)
+        if model is None:
+            print(f"Error loading the model {model_id}. Quitting...")
+            return None
+    print(f"Starting classification with model {model_id}...")
+    
+    results = [] # for the labels
+    responses = []
 
-response = start_classification_trns(model, processor, model_id)
-answer_dict = process_missing_output(response, expected_labels)
-temp = get_final_dict_entry(answer_dict, ad_id)
+    for image in images:
+        image_path = os.path.join(image_folder, image)
+        #base64_image = encode_image(image_path)
+        #image_url = f"data:image/jpeg;base64,{base64_image}"
 
-# for Qwen
-model_id = MULTIMODAL_MODELS[0]
-model, processor = initiate_transformers_model(model_id) # initiate the right model and processor
+        ad_id = AD_PATTERN.findall(image)[0][0]
+        ad_creative_bodies = captions[captions["img_id"] == ad_id]["ad_creative_bodies"].values
+        page_name = captions[captions["img_id"] == ad_id]["page_name"].values[0]
+        
+        # check if ad_creative_bodies exists and is not NaN
+        if len(ad_creative_bodies) == 0 or pd.isna(ad_creative_bodies):
+            ad_creative_bodies = "AD TEXT NOT AVAILABLE"
+        else:
+            ad_creative_bodies = ad_creative_bodies[0]
+
+        try:
+            # check if we're using an API model
+            if model_id in API_MODELS:
+                response, response_time = start_classification_apis(model_id, api_key, api_url, image_path, ad_creative_bodies, page_name)
+                response = response.json()['choices'][0]['message']['content']
+                #answer_dict = {match[0].strip(): (match[1].strip(), match[2].strip()) for match in pattern_api.findall(answers)}
+            else:  # if it's a local transformer model
+                response, response_time = start_classification_trns(model, processor, model_id, image_path, ad_creative_bodies, page_name)
+            
+            responses.append(response)
+
+            answer_dict = process_missing_output(response, expected_labels)
+            dict_entry = get_final_dict_entry(answer_dict, ad_id)
+            dict_entry.update({"response_time": round(response_time, 2)})
+        except Exception as e:
+            print(f"Error processing image {image} due to: {e}.")
+            dict_entry = {"img_id": ad_id}
+    
+        results.append(dict_entry)
+
+    try:
+        labeling_outputs = pd.DataFrame(results)
+        labeling_outputs['img_id'] = labeling_outputs['img_id'].astype(str)
+    except Exception as e:
+        print(results)
+        print(f"Unable to convert the output to a dataframe. Returning the data as it is.")
+        return results, responses
+
+    print(f"DONEEEE classifying {len(images)} images using model {model_id} !!!")
+    return labeling_outputs, responses
 
 
+# start from here
+# read the ads data
+ads_data = pd.read_excel("persistent/AI_validation/validation results/digital_coding_clean.xlsx")
+sampled_images = random.sample(images, 3)
 
-## APIs:
-response = start_classification_apis(openai_model_id, openai_api_key, openai_api_url)
-answers = response.json()['choices'][0]['message']['content']
-answer_dict = {match[0].strip(): (match[1].strip(), match[2].strip()) for match in pattern_api.findall(answers)}
-temp = get_final_dict_entry(answer_dict, ad_id)
+img_names = [os.path.splitext(image)[0] for image in sampled_images] # change all_image_ids to sampled_images
+captions = ads_data[ads_data["img_id"].isin(img_names)][["img_id", "ad_creative_bodies", "page_name"]]
 
-response2 = start_classification_apis(mistral_model_id, mistral_api_key, mistral_api_url)
-answers2 = response2.json()['choices'][0]['message']['content']
-answer_dict2 = {match[0].strip(): (match[1].strip(), match[2].strip()) for match in pattern_api.findall(answers2)}
-temp2 = get_final_dict_entry(answer_dict2, ad_id)
+#labeling_outputs, responses = label_images(sampled_images, captions, model_id=mistral_model_id, api_key=mistral_api_key, api_url=mistral_api_url)
+labeling_outputs, responses = label_images(sampled_images, captions, model_id=TEXT_MODELS[0])
+
+from datetime import datetime
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") # for the filename
+filename = f"{TEXT_MODELS[0]}_{timestamp}.xlsx"
+labeling_outputs.to_excel(f"persistent/AI_validation/validation results/gpu/{filename}", index=False)
+
 
 
 # best models

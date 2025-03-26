@@ -1,7 +1,7 @@
 import re
 
-pattern_api = re.compile(r"\*{1,2}(.*?)\*{1,2}: ([^\n]+?) [–-] (.*?)(?=\n\*|$)", re.DOTALL)
-pattern_aya = re.compile(r"\*{1,2}(.*?)\*{1,2}:\s*([^\n–-]+?)\s*[–-]\s*(.*?)(?=\n\*|$)", re.DOTALL) 
+#PATTERN_API = re.compile(r"\*{1,2}(.*?)\*{1,2}: ([^\n]+?) [–-] (.*?)(?=\n\*|$)", re.DOTALL)
+PATTERN_AYA = re.compile(r"\*{1,2}(.*?)\*{1,2}:\s*([^\n–-]+?)\s*[–-]\s*(.*?)(?=\n\*|$)", re.DOTALL) 
 # this one could also work for the API regex
 
 instructions_1 = (
@@ -597,7 +597,7 @@ def process_missing_output(response, expected_labels):
         response = response[0]
 
     extracted = {label.strip(): {"answer": answer, "explanation": explanation.strip() if explanation else ""}
-        for label, answer, explanation in pattern_aya.findall(response)}
+        for label, answer, explanation in PATTERN_AYA.findall(response)}
 
     full_output = {}
     for label in expected_labels:
