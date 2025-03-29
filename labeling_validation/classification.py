@@ -22,8 +22,8 @@ from persistent.AI_validation.labeling_validation.WHO_questions import *
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
-TEXT_MODELS = ["google/gemma-3-12b-it", "CohereForAI/aya-vision-8b"]
-MULTIMODAL_MODELS = ["Qwen/Qwen2.5-VL-7B-Instruct", "mistralai/Pixtral-12B-2409"]
+TEXT_MODELS = ["google/gemma-3-12b-it", "CohereForAI/aya-vision-32b"]
+MULTIMODAL_MODELS = ["Qwen/Qwen2.5-VL-32B-Instruct", "mistralai/Pixtral-12B-2409"]
 API_MODELS = ["gpt-4o", "pixtral-12b-2409"]
 
 AD_PATTERN = re.compile(r"(.+?)\.(png|jpeg|jpg)")
@@ -116,7 +116,7 @@ def start_classification_apis(model_id, api_key, api_url, image_path, ad_creativ
     torch.cuda.empty_cache() # free unused memory
     print(response.json()) # for gpt-4o, this format doesn't work!!!! change the instructions?
 
-    print(f"Done classifying using model {model_id}!!! YAYYYY !!!!")
+    #print(f"Done classifying using model {model_id}!!! YAYYYY !!!!")
 
     return response, response_time
 
@@ -130,8 +130,8 @@ def initiate_transformers_model(model_id):
     # available models
     MODEL_MAP = { # try bigger
         "google/gemma-3-12b-it": Gemma3ForConditionalGeneration, # Gemma3 - https://huggingface.co/google/gemma-3-12b-it
-        "Qwen/Qwen2.5-VL-7B-Instruct": Qwen2_5_VLForConditionalGeneration, # Qwen - https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct
-        "CohereForAI/aya-vision-8b": AutoModelForImageTextToText # Aya Vision - https://huggingface.co/CohereForAI/aya-vision-8b
+        "Qwen/Qwen2.5-VL-32B-Instruct": Qwen2_5_VLForConditionalGeneration, # Qwen - https://huggingface.co/Qwen/Qwen2.5-VL-32B-Instruct
+        "CohereForAI/aya-vision-32b": AutoModelForImageTextToText # Aya Vision - https://huggingface.co/CohereForAI/aya-vision-32b
     }
 
     if model_id not in MODEL_MAP:
@@ -216,11 +216,12 @@ def label_images(images, captions, model_id, api_key=None, api_url=None):
         if model is None:
             print(f"Error loading the model {model_id}. Quitting...")
             return None
-    print(f"Starting classification with model {model_id}...")
+    print(f"Starting classifying {len(images)} images with model {model_id}...")
     
     results = [] # for the labels
     responses = []
-
+    n = 1 # just to count the images
+    
     for image in images:
         image_path = os.path.join(image_folder, image)
         #base64_image = encode_image(image_path)
@@ -255,6 +256,8 @@ def label_images(images, captions, model_id, api_key=None, api_url=None):
             dict_entry = {"img_id": ad_id}
     
         results.append(dict_entry)
+        print(f"===== Image {n} out of {len(images)} classified! =====")
+        n += 1
 
     try:
         labeling_outputs = pd.DataFrame(results)
@@ -271,30 +274,36 @@ def label_images(images, captions, model_id, api_key=None, api_url=None):
 # start from here
 # read the ads data
 ads_data = pd.read_excel("persistent/AI_validation/validation results/digital_coding_clean.xlsx")
-sampled_images = random.sample(images, 3)
+coded_ads = pd.read_excel("persistent/AI_validation/validation results/gpu/gemma3_20250326_185828.xlsx")
+sampled_images = (coded_ads["img_id"].astype(str) + ".png").tolist() # code the same 50 images
 
 img_names = [os.path.splitext(image)[0] for image in sampled_images] # change all_image_ids to sampled_images
 captions = ads_data[ads_data["img_id"].isin(img_names)][["img_id", "ad_creative_bodies", "page_name"]]
 
-#labeling_outputs, responses = label_images(sampled_images, captions, model_id=mistral_model_id, api_key=mistral_api_key, api_url=mistral_api_url)
-labeling_outputs, responses = label_images(sampled_images, captions, model_id=TEXT_MODELS[0])
+#labeling_outputs, responses = label_images(sampled_images, captions, model_id=openai_model_id, api_key=openai_api_key, api_url=openai_api_url)
+labeling_outputs, responses = label_images(sampled_images, captions, model_id=MULTIMODAL_MODELS[0])
 
 from datetime import datetime
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") # for the filename
-filename = f"{TEXT_MODELS[0]}_{timestamp}.xlsx"
+filename = f"qwen_{timestamp}.xlsx"
 labeling_outputs.to_excel(f"persistent/AI_validation/validation results/gpu/{filename}", index=False)
 
 
 
 # best models
-# 1. Gemma3-4b (6 min), 12b (29 mins), 27b (30 mins)
-# 2. Qwen2.5-7b (2 min), 72b very slow (71 minutes) but better output format
-# 3. Aya Vision-8b (20 sec), 32b (12 mins)
+# 1. Gemma3 12b (29 mins), 27b (30 mins)
+# 2. Qwen2.5 32b (~30 mins), 72b (71 minutes)
+# 3. Aya Vision 32b (10-25 mins)
 # 4. MistralAI via API, 12b (14 sec)
 # 5. GPT-4o (18 sec)
 
 # Qwen example output: (quite fast, 5-6 seconds)
-# ['*AD_TYPE_CLASSIFICATION*: No - The ad is for a restaurant/takeaway/delivery outlet, not a food/drink manufacturing company or brand.\n*MARKETING_STRATEGIES*: Yes - OWNED_CARTOON, CELEBRITY, DISCOUNT\n*PREMIUM_OFFERS*: No - The ad focuses on discounts, not premium offers.\n*TARGET_AGE_GROUP*: No - The ad is not specifically targeted at children or adolescents.\n*WHO_FOOD_CATEGORIES*: Yes - READYMADE_CONVENIENCE\n*SPECULATION_LEVEL*: 2 - The ad clearly promotes a pizza deal, but the specific type of pizza is not detailed, requiring some inference.']
+# ['*AD_TYPE_CLASSIFICATION*: No - The ad is for a restaurant/takeaway/delivery outlet, not a food/drink manufacturing company or brand.\n
+# *MARKETING_STRATEGIES*: Yes - OWNED_CARTOON, CELEBRITY, DISCOUNT\n
+# *PREMIUM_OFFERS*: No - The ad focuses on discounts, not premium offers.\n*
+# TARGET_AGE_GROUP*: No - The ad is not specifically targeted at children or adolescents.\n
+# *WHO_FOOD_CATEGORIES*: Yes - READYMADE_CONVENIENCE\n
+# *SPECULATION_LEVEL*: 2 - The ad clearly promotes a pizza deal, but the specific type of pizza is not detailed, requiring some inference.']
 
 
 # other models: OmniParser-v2.0

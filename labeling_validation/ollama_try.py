@@ -10,6 +10,7 @@ from persistent.AI_validation.labeling_validation.WHO_questions import *
 
 # TO ENABLE THE GPU, log into oc from cmd, then type: 
 # oc patch dc/ai-labeling-gpu --type=json -p="[{"op": "replace", "path": "/spec/template/spec/containers/0/resources", "value": {"requests": {"nvidia.com/gpu": 1}, "limits": {"nvidia.com/gpu": 1}}}]"
+# oc patch dc/ai-labeling-gpu --type=json -p="[{"op": "replace", "path": "/spec/template/spec/containers/0/resources", "value": {}}]"
 
 pattern2 = re.compile(r"\*{1,2}(.*?)\*{1,2}: ([^\n]+?) [–-] (.*?)(?=\n\*|$)", re.DOTALL)
 all_questions = [alcohol, type_ad, marketing_str, premium_offer, who_cat, target_age_group]
@@ -140,11 +141,12 @@ messages = [
     {"role": "system", "content": instructions_new},
     #{"role": "user", "content": f"Name of the page running the ad: {page_name}"},
     #{"role": "user", "content": f"Ad caption: {ad_creative_bodies}"},
-    {"role": "user", "content": create_user_content_string(page_name, ad_creative_bodies), "images": [base64_image]}
+    #{"role": "user", "content": create_user_content_string(page_name, ad_creative_bodies), "images": [base64_image]}
+    {"role": "user", "content": create_user_content(), "images": [base64_image]}
 ]
 
 payload = {
-    "model": llama_model,
+    "model": llava_model,
     "messages": messages,
     "stream": False,
     "options": {

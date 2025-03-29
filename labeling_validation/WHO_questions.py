@@ -161,18 +161,18 @@ instructions_new = (
     "**Do NOT list individual ingredients if the ad features a full meal or composite dish.** Instead, select the most representative category. "
     "Example: If an ad features a sandwich, select 'READYMADE_CONVENIENCE' and NOT 'Bread' and 'Meat'. "
 
-    # "**IMPORTANT: If you answer 'Yes' for a category, you MUST immediately follow it with a second line specifying the processing level.** "
-    # "Use this format for processing: *<QUESTION_LABEL>_PROCESSING*: <Processing Level> – explanation. "
-    # "Do NOT provide processing levels for categories marked 'No'. "
-    # "Use the following processing levels: "
-    # "1. **UNPROCESSED** – Natural foods (excluding Alcohol) that have undergone minimal changes (such as cleaning, drying, or freezing) without significant alteration to their nutritional content (e.g., fresh meat, eggs, frozen fruit). "
-    # "2. **PROCESSED** – Foods (excluding Alcohol) that have undergone processes like canning, smoking, fermentation, or preservation, often with added ingredients to extend shelf life or enhance flavor (e.g., canned tomatoes, cheese, bread, smoked meat, dry fish). "
-    # "3. **ULTRA-PROCESSED** – Formulations of industrial ingredients (excluding Alcohol) that result from a series of industrial processes, such as frying, chemical modifications, or application of additives, containing little or no whole foods (e.g., chips, candy, instant noodles, soft drinks, fast food). "
-    # "4. **INGREDIENTS** – Substances (excluding Alcohol) extracted or refined from minimally processed foods, typically used in cooking or seasoning (e.g., sugar, butter, oils, spices). "
-    # "5. **NA_PROCESSING** - The ad does not depict any food or beverage and the processing level is therefore non-applicable. "
+    "**IMPORTANT: If you answer 'Yes' for a WHO Food category, you MUST immediately follow it with a second line specifying the processing level.** "
+    "Use this format for processing: *<QUESTION_LABEL>_PROCESSING*: <Processing Level> – explanation. "
+    "Do NOT provide processing levels for categories marked 'No'. "
+    "Use the following processing levels: "
+    "1. **UNPROCESSED** – Natural foods (excluding Alcohol) that have undergone minimal changes (such as cleaning, drying, or freezing) without significant alteration to their nutritional content (e.g., fresh meat, eggs, frozen fruit). "
+    "2. **PROCESSED** – Foods (excluding Alcohol) that have undergone processes like canning, smoking, fermentation, or preservation, often with added ingredients to extend shelf life or enhance flavor (e.g., canned tomatoes, cheese, bread, smoked meat, dry fish). "
+    "3. **ULTRA-PROCESSED** – Formulations of industrial ingredients (excluding Alcohol) that result from a series of industrial processes, such as frying, chemical modifications, or application of additives, containing little or no whole foods (e.g., chips, candy, instant noodles, soft drinks, fast food). "
+    "4. **INGREDIENTS** – Substances (excluding Alcohol) extracted or refined from minimally processed foods, typically used in cooking or seasoning (e.g., sugar, butter, oils, spices). "
+    "5. **NA_PROCESSING** - The ad does not depict any food or beverage and the processing level is therefore non-applicable. "
 
-    # "### Example of Response Format: *CHOCOLATE_SUGAR*: Yes – explanation; *CHOCOLATE_SUGAR_PROCESSING*: ULTRA_PROCESSED – explanation "
-    # "**Important:** Only provide processing levels for categories marked 'Yes'. Do not add processing levels for 'No' answers. "
+    "### Example of Response Format: *CHOCOLATE_SUGAR*: Yes – explanation; *CHOCOLATE_SUGAR_PROCESSING*: ULTRA_PROCESSED – explanation "
+    "**Important:** Only provide processing levels for categories marked 'Yes'. Do not add processing levels for 'No' answers. "
 
     "At the end, double-check that every question label is answered explicitly with either 'Yes' or 'No'. Any missing label will be treated as an incomplete answer. "
     "### Output Example: "
@@ -605,6 +605,11 @@ def process_missing_output(response, expected_labels):
             full_output[label] = extracted[label]
         else:
             full_output[label] = {"answer": "MISSING", "explanation": ""}
+
+    # add any *_PROCESSING labels that were found in the output
+    for label in extracted:
+        if label not in full_output:
+            full_output[label] = extracted[label]
 
     answer_dict = {label: [data["answer"], data["explanation"]] for label, data in full_output.items()}
 
