@@ -177,11 +177,6 @@ filtered_df = df[df['id'].astype(str).isin(unique_image_ids)]
 
 len(filtered_df)
 
-# for img_id in unique_image_ids:
-#     if img_id not in df['id'].astype(str).values:
-#         print(f"ID {img_id} is not in the DataFrame")
-
-
 filtered_df.loc[:, 'id'] = filtered_df['id'].astype(str)
 filtered_df.loc[:, 'page_id'] = filtered_df['page_id'].astype(str)
 filtered_df.to_excel('output/Belgium/ads_data/Belgium_ads_subset.xlsx', index=False)
@@ -189,5 +184,39 @@ filtered_df.to_excel('output/Belgium/ads_data/Belgium_ads_subset.xlsx', index=Fa
 temp = filtered_df.groupby('page_name').size().reset_index(name='count').sort_values(by='count', ascending=True)
 #print(temp.to_string(index=False))
 
+
+
+
+# THE NEW 1000 ADS SAMPLE
+df = pd.read_excel("persistent/AI_validation/data/new_aws_1000.xlsx")
+img_ids = df['img_id'].astype(str) + '.png'  # add .png to each id
+
+source_folder = 'persistent/AI_validation/data/unique_images'
+destination_folder = 'persistent/AI_validation/data/1000_images'
+
+os.makedirs(destination_folder, exist_ok=True)
+
+for img_file in img_ids:
+    source_path = os.path.join(source_folder, img_file)
+    dest_path = os.path.join(destination_folder, img_file)
+    if os.path.exists(source_path):
+        shutil.copy2(source_path, dest_path)
+    else:
+        print(f"Missing image: {img_file}")  
+
+len(os.listdir(destination_folder))
+
+
+gemma_all = pd.read_excel("persistent/AI_validation/validation results/gpu/gemma_all.xlsx")
+pixtral_all = pd.read_excel("persistent/AI_validation/validation results/gpu/pixtral_all.xlsx")
+qwen_all = pd.read_excel("persistent/AI_validation/validation results/gpu/qwen_all.xlsx")
+
+thousand_ids = set(df['img_id'].astype(str))
+
+pixtral_filtered = pixtral_all[pixtral_all['img_id'].astype(str).isin(thousand_ids)].reset_index(drop=True)
+qwen_filtered = qwen_all[qwen_all['img_id'].astype(str).isin(thousand_ids)].reset_index(drop=True)
+
+pixtral_filtered.to_excel("persistent/AI_validation/validation results/gpu/pixtral_all.xlsx", index=False)
+qwen_filtered.to_excel("persistent/AI_validation/validation results/gpu/qwen_all.xlsx", index=False)
 
 

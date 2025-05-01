@@ -9,7 +9,6 @@ import pandas as pd
 import torch
 from PIL import Image
 
-from openai import OpenAI
 from huggingface_hub import login
 from transformers import AutoModelForImageTextToText, Gemma3ForConditionalGeneration, AutoProcessor, LlavaForConditionalGeneration, AutoModelForCausalLM, Qwen2_5_VLForConditionalGeneration
 from qwen_vl_utils import process_vision_info
@@ -22,8 +21,8 @@ from persistent.AI_validation.labeling_validation.WHO_questions import *
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
-TEXT_MODELS = ["google/gemma-3-12b-it", "CohereForAI/aya-vision-32b"]
-MULTIMODAL_MODELS = ["Qwen/Qwen2.5-VL-32B-Instruct", "mistralai/Pixtral-12B-2409"]
+TEXT_MODELS = ["google/gemma-3-12b-it"]
+MULTIMODAL_MODELS = "Qwen/Qwen2.5-VL-32B-Instruct"
 API_MODELS = ["gpt-4o", "pixtral-12b-2409"]
 
 AD_PATTERN = re.compile(r"(.+?)\.(png|jpeg|jpg)")
@@ -31,7 +30,7 @@ AD_PATTERN = re.compile(r"(.+?)\.(png|jpeg|jpg)")
 all_questions = [alcohol, type_ad, marketing_str, premium_offer, who_cat, target_age_group]
 expected_labels = [label for section in all_questions for (label, _) in section] + ['SPECULATION_LEVEL'] # all question labels
 
-image_folder = "persistent/AI_validation/data/unique_images" # all the images
+image_folder = "persistent/AI_validation/data/1000_images" # all the images
 images = [file for file in os.listdir(image_folder) if file.lower().endswith(('.jpg', '.jpeg', '.png'))]
 
 # read the keys
@@ -274,37 +273,37 @@ def label_images(images, captions, model_id, api_key=None, api_url=None):
 # start from here
 # read the ads data
 ads_data = pd.read_excel("persistent/AI_validation/validation results/digital_coding_clean.xlsx")
-coded_ads = pd.read_excel("persistent/AI_validation/validation results/gpu/gemma3_20250326_185828.xlsx")
-sampled_images = (coded_ads["img_id"].astype(str) + ".png").tolist() # code the same 50 images
+coded_ads2 = pd.read_excel("persistent/AI_validation/validation results/gpu/pixtral_20250501_130435.xlsx")
+coded_ads = pd.read_excel("persistent/AI_validation/validation results/gpu/pixtral_all.xlsx")
 
-img_names = [os.path.splitext(image)[0] for image in sampled_images] # change all_image_ids to sampled_images
+#uncoded_images_sample = ((coded_ads[~coded_ads['img_id'].isin(uncoded_ads['img_id'])]['img_id']).astype(str) + ".png").tolist()
+#len(uncoded_images_sample)
+coded_images = (coded_ads["img_id"].astype(str) + ".png").tolist() # code the same 50 images
+coded_images2 = (coded_ads2["img_id"].astype(str) + ".png").tolist()
+all_coded_images = set(coded_images) | set(coded_images2) 
+
+uncoded_images_sample = [img for img in images if img not in all_coded_images]
+# randomly sample
+uncoded_images = random.sample(uncoded_images_sample, 200)
+
+img_names = [os.path.splitext(image)[0] for image in uncoded_images] # change all_image_ids to sampled_images
 captions = ads_data[ads_data["img_id"].isin(img_names)][["img_id", "ad_creative_bodies", "page_name"]]
 
-#labeling_outputs, responses = label_images(sampled_images, captions, model_id=openai_model_id, api_key=openai_api_key, api_url=openai_api_url)
-labeling_outputs, responses = label_images(sampled_images, captions, model_id=MULTIMODAL_MODELS[0])
+labeling_outputs, responses = label_images(uncoded_images, captions, model_id=mistral_model_id, api_key=mistral_api_key, api_url=mistral_api_url)
+#labeling_outputs, responses = label_images(uncoded_images, captions, model_id=TEXT_MODELS[0])
 
 from datetime import datetime
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") # for the filename
-filename = f"qwen_{timestamp}.xlsx"
+filename = f"pixtral_{timestamp}.xlsx"
 labeling_outputs.to_excel(f"persistent/AI_validation/validation results/gpu/{filename}", index=False)
 
 
 
 # best models
-# 1. Gemma3 12b (29 mins), 27b (30 mins)
+# 1. GPT-4o (18 sec) 
 # 2. Qwen2.5 32b (~30 mins), 72b (71 minutes)
-# 3. Aya Vision 32b (10-25 mins)
-# 4. MistralAI via API, 12b (14 sec)
-# 5. GPT-4o (18 sec)
-
-# Qwen example output: (quite fast, 5-6 seconds)
-# ['*AD_TYPE_CLASSIFICATION*: No - The ad is for a restaurant/takeaway/delivery outlet, not a food/drink manufacturing company or brand.\n
-# *MARKETING_STRATEGIES*: Yes - OWNED_CARTOON, CELEBRITY, DISCOUNT\n
-# *PREMIUM_OFFERS*: No - The ad focuses on discounts, not premium offers.\n*
-# TARGET_AGE_GROUP*: No - The ad is not specifically targeted at children or adolescents.\n
-# *WHO_FOOD_CATEGORIES*: Yes - READYMADE_CONVENIENCE\n
-# *SPECULATION_LEVEL*: 2 - The ad clearly promotes a pizza deal, but the specific type of pizza is not detailed, requiring some inference.']
-
+# 3. MistralAI via API, 12b (14 sec)
+# 4. Gemma3 12b (29 mins), 27b (30 mins)
 
 # other models: OmniParser-v2.0
 # designed to be able to convert unstructured screenshot image into structured list of elements including interactable regions location and captions of icons on its potential functionality.
