@@ -1,66 +1,79 @@
-from openai import OpenAI
 import requests
 import os
 import pandas as pd
+import json
 
-client = OpenAI()
-api_key = os.environ["OPENAI_API_KEY"]
+with open('keys.txt') as f:
+    json_data = json.load(f)
+    
+gpt_api_key = os.environ["OPENAI_API_KEY"]
+gpt_api_url = "https://api.openai.com/v1/chat/completions"
+gpt_model_id = "gpt-4o"
 
-headers = {
-    "Content-Type": "application/json",
-    "Authorization": f"Bearer {api_key}"
-}
+mistral_model_id = "mistral-small-latest"
+mistral_api_url = "https://api.mistral.ai/v1/chat/completions"
+mistral_api_key = json_data["mistralai"]
 
 # load the data (for the text)
 ads_data = pd.read_excel("validation results/digital_coding_clean.xlsx")
 captions = ads_data[["img_id", "ad_creative_bodies"]]
 
-instructions = (
-    "Flag the language in the text in the following way: if it's French, type FR, if it's Dutch type NL, if it's both type BOTH, if it's English type EN."
-)
 
-results = []
+def flag_language(api_model_id, api_url, api_key, captions, n = len(captions)):
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
 
+    instructions = (
+        "Flag the language in the text in the following way: if it's French - type FR, if it's Dutch - type NL, if it's both - type BOTH, if it's English - type EN. Answer only with the language code. "
+    )
 
-for i in range(100, len(captions)):
-    
-    img_id = captions.iloc[i]["img_id"]
-    ad_text = captions.iloc[i]["ad_creative_bodies"]
-    
-    print(f"Classifying ad {i}...\n")
-    
-    if len(ad_text) == 0 or pd.isna(ad_text):
+    results = []
+
+    for i in range(n):
+        
+        img_id = captions.iloc[i]["img_id"]
+        ad_text = captions.iloc[i]["ad_creative_bodies"]
+        
+        print(f"Classifying ad {i} out of {n}...\n")
+        
+        if len(ad_text) == 0 or pd.isna(ad_text):
+            dict_entry = {
+                "ad_id": img_id,
+                "language": "NONE"
+            }
+            continue
+
+        messages = [{"role": "system", "content": instructions}]
+        user_content = [{"type": "text", "text": "Ad caption: " + ad_text}] 
+        messages.append({"role": "user", "content": user_content})
+
+        # define payload for the API call
+        payload = {
+            "model": api_model_id,
+            "messages": messages,
+            "temperature": 0.01
+        }
+
+        response = requests.post(api_url, headers=headers, json=payload)
+        #print(response.json())
+        language_answer = response.json()['choices'][0]['message']['content']
+        
         dict_entry = {
             "ad_id": img_id,
-            "language": "NONE"
+            "ad_text": ad_text,
+            "language": language_answer
         }
-        continue
+        
+        results.append(dict_entry)
+        
+    languages = pd.DataFrame(results)
+    return languages
 
-    messages = [{"role": "system", "content": instructions}]
-    user_content = [{"type": "text", "text": "Ad caption: " + ad_text}] 
-    messages.append({"role": "user", "content": user_content})
 
-    # define payload for the API call
-    payload = {
-        "model": "gpt-4o",
-        "messages": messages,
-        "temperature": 0.01
-    }
-
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-    print(response.json())
-    language_answer = response.json()['choices'][0]['message']['content']
-    
-    dict_entry = {
-        "ad_id": img_id,
-        "ad_text": ad_text,
-        "language": language_answer
-    }
-    
-    results.append(dict_entry)
-    
-languages = pd.DataFrame(results)
-languages.to_excel('validation results/language_flagging.xlsx', index=False)
+languages = flag_language(gpt_model_id, gpt_api_url, gpt_api_key, captions)
+languages.to_excel('data/language_flagging.xlsx', index=False)
 
 
 ############ SPLIT DATASET BY LANGUAGES

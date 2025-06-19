@@ -4,25 +4,50 @@ library(dplyr)
 library(irr)
 library(tidyr)
 library(ggplot2)
+library(boot)
 
-
-root_folder <- "C:/Users/P70090005/Documents/gpu outputs/"
+root_folder <- "C:/Users/P70090005/Documents/AI-validation/gpu outputs/"
 
 ###### START ANALYSIS HERE
 #original_labeling <- read_excel(paste(root_folder, "validation results/original_coding.xlsx", sep=""))
 dig_coding <- read_excel(paste(root_folder, "digital_coding_clean.xlsx", sep=""))
 
 ### LOAD THE AI-LABELLED DATA
-gemma <- read_excel(paste(root_folder, "gemma_all.xlsx", sep=""))
-#gpt <- read_excel(paste(root_folder, "validation results/gpu/gpt4o_20250327_133400.xlsx", sep=""))
-pixtral <- read_excel(paste(root_folder, "pixtral_all.xlsx", sep=""))
-qwen <- read_excel(paste(root_folder, "qwen_all.xlsx", sep=""))
+gemma <- read_excel(paste(root_folder, "gemma_all_1000.xlsx", sep=""))
+gpt <- read_excel(paste(root_folder, "gpt_all_1000.xlsx", sep=""))
+pixtral <- read_excel(paste(root_folder, "pixtral_all_1000.xlsx", sep=""))
+qwen <- read_excel(paste(root_folder, "qwen_all_1000.xlsx", sep=""))
+sum(duplicated(pixtral$img_id))
 
-dig_coding <- dig_coding[dig_coding$img_id %in% qwen$img_id, ]
+
+dig_coding <- dig_coding[dig_coding$img_id %in% gemma$img_id, ]
 dig_coding <- dig_coding[order(dig_coding$img_id), ]
 dig_coding[] <- lapply(dig_coding, as.character)
 
 gemma <- gemma[gemma$img_id %in% qwen$img_id, ]
+
+# create new ad_types and who_cats based on whether there is alcohol
+alcohol_changes <- function(df) {
+  # adjust type_ad: overwrite with "9" if is_alcohol == 1
+  df[["new_type_ad"]] <- ifelse(df[["is_alcohol"]] == 1, "9", df[["type_ad"]])
+  
+  # adjust who_cat: append "A" or replace with "A" if NA/empty
+  df[["new_who_cat"]] <- ifelse(
+    df[["is_alcohol"]] == 1,
+    ifelse(is.na(df[["who_cat"]]) | df[["who_cat"]] == "",
+           "A",
+           paste("A", df[["who_cat"]], sep = ", ")),
+    df[["who_cat"]]
+  )
+  
+  return(df)
+}
+
+gemma <- alcohol_changes(gemma)
+#qwen <- alcohol_changes(qwen)
+pixtral <- alcohol_changes(pixtral)
+gpt <- alcohol_changes(gpt)
+
 
 # sort each dataframe by img_id
 gemma <- gemma[order(gemma$img_id), ]
@@ -30,7 +55,18 @@ gpt <- gpt[order(gpt$img_id), ]
 pixtral <- pixtral[order(pixtral$img_id), ]
 qwen <- qwen[order(qwen$img_id), ]
 
-compare_agreement <- function(colname, models, dig_coding = NULL) {
+gemma$model <- "gemma"
+gpt$model <- "gpt"
+pixtral$model <- "pixtral"
+qwen$model <- "qwen"
+models <- list(gemma = gemma, pixtral = pixtral, gpt = gpt, qwen = qwen)
+
+table(qwen$new_who_cat)
+
+# ==============================================================================
+# VALIDATION OF SINGLE-CHOICE COLUMNS
+
+compare_agreement <- function(colname, models) {
   # filter the models that contain the colname
   valid_models <- models[sapply(models, function(df) colname %in% colnames(df))]
   
@@ -39,17 +75,10 @@ compare_agreement <- function(colname, models, dig_coding = NULL) {
   names(model_cols) <- names(valid_models)
   
   df <- as.data.frame(model_cols)
-  
   n <- nrow(df)
   
-  # if dig_coding exists and has the column, include it
-  has_coder <- !is.null(dig_coding) && colname %in% colnames(dig_coding)
-  if (has_coder) {
-    df$coder <- dig_coding[[colname]]
-  }
-  
-  # full agreement proportion
-  full_agreement_prop <- mean(apply(df, 1, function(x) length(unique(x)) == 1))
+  # compute percentage agreement (full agreement rows only)
+  percent_agreement <- mean(apply(df, 1, function(x) length(unique(x)) == 1)) * 100
   
   # pairwise Cohen's Kappa
   pairwise <- combn(names(df), 2, simplify = FALSE)
@@ -65,7 +94,7 @@ compare_agreement <- function(colname, models, dig_coding = NULL) {
   
   return(list(
     column = colname,
-    full_agreement_prop = full_agreement_prop,
+    percent_agreement = percent_agreement,
     pairwise_kappa = kappa_results,
     fleiss_kappa = fleiss_val
   ))
@@ -85,7 +114,7 @@ summarize_agreement <- function(result_list) {
     kappa_df <- as.data.frame(as.list(kappa_vals))[all_keys]  # enforce column order
     data.frame(
       question = res$column,
-      prop_full_agreement = res$full_agreement_prop,
+      percent_agreement = res$percent_agreement,
       fleiss_kappa = res$fleiss_kappa,
       kappa_df
     )
@@ -94,14 +123,15 @@ summarize_agreement <- function(result_list) {
   do.call(rbind, rows)
 }
 
-questions <- c("type_ad", "target_group", "is_alcohol")
-models <- list(gemma = gemma, pixtral = pixtral, qwen = qwen)
-all_results <- lapply(questions, function(q) {compare_agreement(q, models, dig_coding)})
+questions <- c("type_ad", "new_type_ad", "target_group", "is_alcohol")
+all_results <- lapply(questions, function(q) {compare_agreement(q, models)})
 names(all_results) <- questions
 
 agreement_summary <- summarize_agreement(all_results)
 
 print(agreement_summary)
+# proportion of ads where all raters gave exactly the same answer
+# fleiss kappa - agreement beyond chance, across all raters
 
 agreement_long <- agreement_summary %>%
   pivot_longer(
@@ -120,7 +150,7 @@ ggplot(agreement_long, aes(x = pair, y = question, fill = kappa)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(title = "Pairwise Agreement Across AI Models", x = "Model Pair", y = "Question")
 
-ggsave(paste(root_folder, "validation results/gpu/pairwise_kappa_heatmap.png", sep=""), width = 9, height = 5)
+ggsave(paste(root_folder, "plots/pairwise_kappa_heatmap.png", sep=""), width = 9, height = 5)
 
 
 ggplot(agreement_summary, aes(x = reorder(question, fleiss_kappa), y = fleiss_kappa)) +
@@ -129,10 +159,93 @@ ggplot(agreement_summary, aes(x = reorder(question, fleiss_kappa), y = fleiss_ka
   labs(title = "Fleiss' Kappa per Question", x = "Question", y = "Fleiss' Kappa") +
   theme_minimal()
 
-ggsave(paste(root_folder, "validation results/gpu/fleiss_kappa_barplot.png", sep=""), width = 8, height = 5)
+ggsave(paste(root_folder, "tt/fleiss_kappa_barplot.png", sep=""), width = 8, height = 5)
 
 
-# multiple choice columns
+
+# ==============================================================================
+# compute the agreement using bootstrapping
+bootstrap_pairwise_kappa <- function(models, column, R = 1000) {
+  model_names <- names(models)
+  pairs <- combn(model_names, 2, simplify = FALSE)
+  
+  all_results <- list()
+  
+  for (pair in pairs) {
+    model1 <- models[[pair[1]]][, c("img_id", column)]
+    model2 <- models[[pair[2]]][, c("img_id", column)]
+    
+    merged <- inner_join(model1, model2, by = "img_id", suffix = c("_1", "_2")) %>%
+      filter(!is.na(.data[[paste0(column, "_1")]]) & !is.na(.data[[paste0(column, "_2")]]))
+    
+    ratings <- merged[, c(paste0(column, "_1"), paste0(column, "_2"))]
+    
+    # convert to character to avoid level mismatch
+    ratings[] <- lapply(ratings, as.character)
+    
+    # bootstrap function: resample rows and recompute kappa
+    boot_fn <- function(data, indices) {
+      kappa2(data[indices, ])$value
+    }
+    
+    boot_result <- boot(data = ratings, statistic = boot_fn, R = R)
+    
+    result_df <- data.frame(
+      question = column,
+      model_pair = paste(pair, collapse = "_"),
+      mean_kappa = mean(boot_result$t),
+      ci_lower = quantile(boot_result$t, 0.025),
+      ci_upper = quantile(boot_result$t, 0.975)
+    )
+    
+    all_results[[paste(pair, collapse = "_")]] <- result_df
+  }
+  
+  bind_rows(all_results)
+}
+
+kappa_boot_all <- bind_rows(
+  lapply(questions, function(var) {
+    bootstrap_pairwise_kappa(models, column = var, R = 1000)
+  })
+)
+
+
+# plot both kappas together
+kappa_point_df <- agreement_long %>%
+  mutate(model_pair = gsub("kappa_", "", pair) %>% 
+           gsub("_", "_", .)  # ensures same format as in bootstrap
+  ) %>%
+  select(model_pair, point_kappa = kappa, question)
+
+kappa_combined <- left_join(kappa_boot_all, kappa_point_df, by = c("question", "model_pair"))
+
+ggplot(kappa_combined, aes(x = model_pair, y = mean_kappa, fill = question)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper),
+                position = position_dodge(width = 0.8), width = 0.2) +
+  geom_point(aes(y = point_kappa), color = "red",
+             position = position_dodge(width = 0.8), size = 2.5) +
+  geom_text(aes(y = point_kappa, label = round(point_kappa, 2)),
+            position = position_dodge(width = 0.8), vjust = -1.5,
+            color = "red", size = 3) +
+  labs(
+    title = "Model Agreement Across Single-Choice Questions",
+    subtitle = "Red dots = regular Kappa | Bars = bootstrapped mean ± 95% CI",
+    x = "Model Pair", y = "Cohen's Kappa"
+  ) +
+  ylim(0, 1) +
+  theme_minimal() +
+  facet_wrap(~ question) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(paste(root_folder, "tt/single_choice_bootsr_kappa.png", sep=""), width = 8, height = 6)
+
+
+
+# ==============================================================================
+# VALIDATION OF MULTIPLE CHOICE COLUMNS
+
 # Jaccard similarity measures how much two models agree on the set of labels they assign to the same ad
 # example: model1 = {1, 2} ; model2 = {2, 3}
 # intersection = {2}, union = {1, 2, 3} => Jaccard = 1 / 3 = 0.33
@@ -148,17 +261,13 @@ jaccard_similarity <- function(str1, str2) {
 }
 
 
-compare_multilabel_agreement <- function(colname, models, dig_coding) {
+compare_multilabel_agreement <- function(colname, models) {
   
   valid_models <- models[sapply(models, function(df) colname %in% colnames(df))]
   
   # extract the relevant column from each model into a named list
   model_cols <- lapply(valid_models, function(df) df[[colname]])
   names(model_cols) <- names(valid_models)
-  
-  if (!is.null(dig_coding) && colname %in% colnames(dig_coding)) {
-    model_cols$coder <- dig_coding[[colname]]
-  }
   
   df <- as.data.frame(model_cols)
   model_pairs <- combn(names(df), 2, simplify = FALSE)
@@ -177,10 +286,10 @@ compare_multilabel_agreement <- function(colname, models, dig_coding) {
   ))
 }
   
-multi_label_cols <- c("marketing_str", "prem_offer", "who_cat")
+multi_label_cols <- c("marketing_str", "prem_offer", "who_cat", "new_who_cat")
 
 multi_results <- lapply(multi_label_cols, function(col) {
-  compare_multilabel_agreement(col, models, dig_coding)
+  compare_multilabel_agreement(col, models)
 })
 names(multi_results) <- multi_label_cols
 
@@ -207,24 +316,119 @@ ggplot(multi_long, aes(x = pair, y = question, fill = jaccard)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(title = "Pairwise Agreement on Multi-Label Columns", x = "Model Pair", y = "Question")
 
-ggsave(paste(root_folder, "validation results/gpu/jaccard_multilabel_heatmap.png", sep=""), width = 9, height = 5)
+ggsave(paste(root_folder, "tt/jaccard_multilabel_heatmap.png", sep=""), width = 9, height = 5)
+
+
+
+compare_krippendorff_alpha_multilabel <- function(colname, models) {
+  valid_models <- models[sapply(models, function(df) colname %in% colnames(df))]
+  
+  df_all <- bind_rows(lapply(valid_models, function(df) {
+    df %>% select(img_id, model, all_of(colname))
+  }))
+  
+  # split marketing_str into separate rows per label
+  df_long <- df_all %>%
+    mutate(!!colname := gsub("\\s+", "", .data[[colname]])) %>%  # Remove any spaces
+    separate_rows(!!sym(colname), sep = ",")
+  
+  # create binary data
+  df_binary <- df_long %>%
+    mutate(value = 1,
+           label = paste0("label_", .data[[colname]])) %>%
+    select(img_id, model, label, value) %>%
+    pivot_wider(names_from = label, values_from = value, values_fill = 0) %>%
+    arrange(img_id, model)
+  
+  models_used <- unique(df_binary$model)
+  model_pairs <- combn(models_used, 2, simplify = FALSE)
+  
+  label_cols <- unique(unlist(strsplit(df_all[[colname]], ", ")))
+  label_cols <- paste0("label_", label_cols[!is.na(label_cols)])
+  
+  # for each label, reshape to matrix: rows = items, cols = raters/models
+  # alphas <- sapply(label_cols, function(label) {
+  #   df_label <- df_binary %>%
+  #     select(img_id, model, !!label) %>%
+  #     pivot_wider(names_from = model, values_from = !!label) %>%
+  #     select(-img_id)
+  #   
+  #   kripp.alpha(t(as.matrix(df_label)), method = "nominal")$value
+  # })
+  
+  # loop over pairs and labels
+  result_list <- list()
+  for (pair in model_pairs) {
+    m1 <- pair[1]
+    m2 <- pair[2]
+    
+    pair_df <- df_binary %>%
+      filter(model %in% c(m1, m2)) %>%
+      arrange(img_id, model)
+    
+    for (label in label_cols) {
+      mat <- pair_df %>%
+        select(img_id, model, !!label) %>%
+        pivot_wider(names_from = model, values_from = !!label) %>%
+        select(-img_id)
+      
+      if (ncol(mat) == 2 && nrow(mat) > 0) {
+        alpha_val <- kripp.alpha(t(as.matrix(mat)), method = "nominal")$value
+        result_list[[length(result_list) + 1]] <- data.frame(
+          variable = colname,
+          model_pair = paste(m1, m2, sep = "_vs_"),
+          label = gsub("^label_", "", label),
+          kripp_alpha = alpha_val
+        )
+      }
+    }
+  }
+  
+  result_df <- do.call(rbind, result_list)
+  
+  # result_df <- data.frame(
+  #   variable = rep(colname, length(alphas)),
+  #   label = gsub("^label_", "", names(alphas)),
+  #   avg_kripp_alpha = mean(alphas),
+  #   kripp_alpha = as.numeric(alphas)
+  # )
+  
+  return(result_df)
+}
+
+multi_kripp_results <- lapply(multi_label_cols, function(col) {
+  compare_krippendorff_alpha_multilabel(col, models)
+})
+multi_kripp_results <- bind_rows(multi_kripp_results)
+
+pairwise_summary <- multi_kripp_results %>%
+  group_by(variable, model_pair) %>%
+  summarise(avg_kripp_alpha = mean(kripp_alpha, na.rm = TRUE), .groups = "drop")
+
+ggplot(pairwise_summary, aes(x = model_pair, y = variable, fill = avg_kripp_alpha)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(avg_kripp_alpha, 2)), color = "black") +
+  scale_fill_gradient2(low = "red", mid = "yellow", high = "green", midpoint = 0.5,
+                       limits = c(0, 1), name = "Krippendorf's Alpha") +
+  labs(title = "Avg Krippendorff's Alpha Across All Multi-Label Questions",
+       x = "Model Pair", y = "Question") +
+  theme_minimal() +
+  coord_fixed() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 
 # confusion matrices
 addmargins(table(GPT=gpt$type_ad, Qwen=qwen$type_ad))
-addmargins(table(GPT=gpt$type_ad, coder=dig_coding$type_ad))
-addmargins(table(GPT=gpt$target_group, Aya=aya$target_group))
 addmargins(table(GPT=gpt$target_group, Gemma=gemma$target_group))
 
 
 
 # look at the distribution of response time
 response_df <- bind_rows(
-  data.frame(model = "aya", response_time = aya$response_time),
   data.frame(model = "gemma", response_time = gemma$response_time),
   data.frame(model = "gpt", response_time = gpt$response_time),
   data.frame(model = "pixtral", response_time = pixtral$response_time),
-  data.frame(model = "qwen", response_time = qwen$response_time)
+  #data.frame(model = "qwen", response_time = qwen$response_time)
 )
 
 ggplot(response_df, aes(x = model, y = response_time, fill = model)) +
@@ -236,7 +440,7 @@ ggplot(response_df, aes(x = model, y = response_time, fill = model)) +
        y = "Response Time (log seconds)") +
   theme(legend.position = "none")
 
-ggsave(paste(root_folder, "validation results/gpu/response_time_distr.png", sep=""), width = 8, height = 5)
+ggsave(paste(root_folder, "tt/response_time_distr.png", sep=""), width = 8, height = 5)
 
 response_df %>%
   group_by(model) %>%
@@ -248,12 +452,65 @@ response_df %>%
     max_time = max(response_time, na.rm = TRUE)
   )
 
+# ==============================================================================
+# apply again bootstrapping
+bootstrap_pairwise_jaccard <- function(models, column, R = 1000) {
+  model_names <- names(models)
+  pairs <- combn(model_names, 2, simplify = FALSE)
+  
+  all_results <- list()
+  
+  for (pair in pairs) {
+    model1 <- models[[pair[1]]][, c("img_id", column)]
+    model2 <- models[[pair[2]]][, c("img_id", column)]
+    
+    merged <- inner_join(model1, model2, by = "img_id", suffix = c("_1", "_2")) %>%
+      filter(!is.na(.data[[paste0(column, "_1")]]) & !is.na(.data[[paste0(column, "_2")]]))
+    
+    if (nrow(merged) == 0) next  # skip empty pairs
+    
+    # compute jaccard for all rows
+    merged$jaccard <- mapply(jaccard_similarity,
+                             merged[[paste0(column, "_1")]],
+                             merged[[paste0(column, "_2")]])
+    
+    # bootstrap: sample row indices, compute mean jaccard
+    boot_fn <- function(data, indices) {
+      mean(data$jaccard[indices], na.rm = TRUE)
+    }
+    
+    boot_result <- boot(data = merged, statistic = boot_fn, R = R)
+    
+    result_df <- data.frame(
+      model_pair = paste(pair, collapse = "_"),
+      mean_jaccard = mean(boot_result$t),
+      ci_lower = quantile(boot_result$t, 0.025, na.rm = TRUE),
+      ci_upper = quantile(boot_result$t, 0.975, na.rm = TRUE)
+    )
+    
+    all_results[[paste(pair, collapse = "_")]] <- result_df
+  }
+  
+  bind_rows(all_results)
+}
+
+
+jaccard_boot_summary <- bootstrap_pairwise_jaccard(models, column = "new_who_cat", R = 1000)
+
+print(jaccard_boot_summary)
+ggplot(jaccard_boot_summary, aes(x = model_pair, y = mean_jaccard)) +
+  geom_col(fill = "darkorange") +
+  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2) +
+  labs(title = "Bootstrapped Pairwise Jaccard Similarity for WHO Categories",
+       x = "Model Pair", y = "Jaccard Similarity") +
+  theme_minimal()
+
+ggsave(paste(root_folder, "tt/bootstr_kappa_who_cat.png", sep=""), width = 8, height = 5)
 
 
 
-
-##################################################
-# analyze the rest of the columns with multiple categories
+# ==============================================================================
+# analyze the multi-label columns by answer choice individually
 
 # function to create dummy vars for a given column
 create_dummy_vars <- function(df, all_cats, column_to_sep) {
@@ -308,36 +565,24 @@ compare_multilabel_kappa <- function(df1, df2, column_name, label1 = "model1", l
 all_offers_text <- c("0" = "None", "1" = "App downloads", "2" = "Contests", "3" = "Pay 2 take 3", "4" = "20% extra",
                      "5" = "Limited edition", "6" = "Social charity", "7" = "Gifts", "8" = "Price discount", "9" = "Loyalty programs")
 
-plot_kappa_results <- function(kappa_df, title = "Cohen's Kappa by Category") {
-  ggplot(kappa_df, aes(x = all_offers_text[category], y = kappa)) +
-    geom_bar(stat = "identity", fill = "steelblue") +
-    geom_text(aes(label = round(p_value, 3)), vjust = -0.5) +
-    theme_minimal() +
-    labs(title = title, x = "Category", y = "Cohen's Kappa") +
-    scale_y_continuous(breaks = seq(0, 1, by = 0.1), limits = c(0, 1)) +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1))
-}
-
-
 ############## PREMIUM OFFERS
-kappa_qwen_vs_gpt <- compare_multilabel_kappa(qwen, gpt, "prem_offer", "qwen", "gpt")
-kappa_gpt_vs_coder <- compare_multilabel_kappa(gpt, dig_coding, "prem_offer", "gpt", "coder")
-
+kappa_pixtral_vs_gpt <- compare_multilabel_kappa(pixtral, gpt, "prem_offer", "pixtral", "gpt")
+kappa_gemma_vs_gpt <- compare_multilabel_kappa(gemma, gpt, "prem_offer", "gemma", "gpt")
 
 # look at them together
-kappa_qwen_vs_gpt$compared_to <- "qwen"
-kappa_gpt_vs_coder$compared_to <- "coder"
-kappa_combined <- rbind(kappa_qwen_vs_gpt, kappa_gpt_vs_coder)
+kappa_pixtral_vs_gpt$compared_to <- "pixtral"
+kappa_gemma_vs_gpt$compared_to <- "gemma"
+kappa_combined <- rbind(kappa_pixtral_vs_gpt, kappa_gemma_vs_gpt)
 
 ggplot(kappa_combined, aes(x = all_offers_text[category], y = kappa, fill = compared_to)) +
   geom_bar(stat = "identity", position = "dodge") +
-  geom_text(aes(label = round(p_value, 3)), position = position_dodge(0.9), vjust = -0.5) +
+  #geom_text(aes(label = round(p_value, 3)), position = position_dodge(0.9), vjust = -0.5) +
   theme_minimal() +
   labs(title = "Premium Offers Agreement of GPT",
        x = "Category", y = "Kappa", fill = "Compared to") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   scale_y_continuous(limits = c(0, 1))
-ggsave(paste(root_folder, "validation results/gpu/prem_offers_gpt_qwen_coder.png", sep=""), width = 8, height = 5)
+ggsave(paste(root_folder, "tt/prem_offers_gpt_gemma_pixt.png", sep=""), width = 8, height = 5)
 
 
 ############## MARKETING STRATEGIES
@@ -345,34 +590,102 @@ all_marketing_str_text <- c("0" = "None", "1" = "Cartoons", "2" = "Licensed char
                             "5" = "Movie char", "6" = "Famous sports", "7" = "Events", "8" = "Age-targeted", 
                             "9" = "Awards", "10" = "Sport events")
 
-kappa_qwen_pixtral <- compare_multilabel_kappa(qwen, pixtral, "marketing_str", "qwen", "pixtral")
 kappa_gpt_pixtral <- compare_multilabel_kappa(gpt, pixtral, "marketing_str", "gpt", "pixtral")
-kappa_gpt_coder <- compare_multilabel_kappa(gpt, dig_coding, "marketing_str", "gpt", "coder")
-kappa_qwen_gpt <- compare_multilabel_kappa(qwen, gpt, "marketing_str", "qwen", "gpt")
-kappa_qwen_pixtral<- compare_multilabel_kappa(qwen, pixtral, "marketing_str", "qwen", "pixtral")
-kappa_qwen_gemma <- compare_multilabel_kappa(qwen, gemma, "marketing_str", "qwen", "gemma")
+kappa_gpt_gemma <- compare_multilabel_kappa(gpt, gemma, "marketing_str", "gpt", "gemma")
 
-kappa_qwen_gpt$compared_to <- "gpt"
-kappa_qwen_pixtral$compared_to <- "pixtral"
-kappa_qwen_gemma$compared_to <- "gemma"
+kappa_gpt_pixtral$compared_to <- "pixtral"
+kappa_gpt_gemma$compared_to <- "gemma"
 
 #kappa_qwen_pixtral$compared_to <- "pixtral"
-kappa_combined <- rbind(kappa_qwen_gpt, kappa_qwen_pixtral, kappa_qwen_gemma)
+kappa_combined <- rbind(kappa_gpt_pixtral, kappa_gpt_gemma)
 
 ggplot(kappa_combined, aes(x = all_marketing_str_text[category], y = kappa, fill = compared_to)) +
   geom_bar(stat = "identity", position = "dodge") +
-  geom_text(aes(label = round(p_value, 3)), position = position_dodge(0.9), vjust = -0.5) +
+  #geom_text(aes(label = round(p_value, 3)), position = position_dodge(0.9), vjust = -0.5) +
   theme_minimal() +
   labs(title = "Marketing Strategies Agreement of Qwen",
        x = "Category", y = "Kappa", fill = "Compared to") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   scale_y_continuous(limits = c(0, 1))
-ggsave(paste(root_folder, "validation results/gpu/marketing_str_qwen_gpt_pixtral_gemma.png", sep=""), width = 9, height = 5)
+ggsave(paste(root_folder, "tt/marketing_str_gpt_gemma_pixt.png", sep=""), width = 9, height = 5)
 
 
 table(dig_coding$marketing_str)
 
 
+# ==============================================================================
+# MORE ANALYSIS - by category of the brand
+# !!! run the below lines only once - not needed anymore since we save un updated excel
+
+# cats <- read_excel("C:/Users/P70090005/Documents/AI-validation/data/3000_ads_by_cat_language.xlsx")
+# 
+# gpt <- cats %>% select(c(img_id, category)) %>% 
+#   right_join(gpt, by = "img_id")
+# 
+# gemma <- cats %>% select(c(img_id, category)) %>% 
+#   right_join(gemma, by = "img_id")
+# 
+# pixtral <- cats %>% select(c(img_id, category)) %>% 
+#   right_join(pixtral, by = "img_id")
+# 
+# write_xlsx(gpt, paste(root_folder, "gpt_all_1000.xlsx", sep=""))
+# write_xlsx(gemma, paste(root_folder, "gemma_all_1000.xlsx", sep=""))
+# write_xlsx(pixtral, paste(root_folder, "pixtral_all_1000.xlsx", sep=""))
+
+
+# how consistent are AI models in different product categories?
+
+
+agreement_by_category <- function(models, column) {
+  model_names <- names(models)
+  pairs <- combn(model_names, 2, simplify = FALSE)
+  all_results <- list()
+  
+  for (pair in pairs) {
+    model1 <- models[[pair[1]]][, c("img_id", column, "category")]
+    model2 <- models[[pair[2]]][, c("img_id", column, "category")]
+    
+    merged <- inner_join(model1, model2, by = c("img_id", "category"), suffix = c("_1", "_2")) %>%
+      filter(!is.na(.data[[paste0(column, "_1")]]) & !is.na(.data[[paste0(column, "_2")]])) %>%
+      mutate(across(starts_with(column), as.character))
+    
+    if (nrow(merged) == 0) next
+    
+    kappa_by_cat <- merged %>%
+      group_by(category) %>%
+      summarise(
+        kappa = if (n() >= 5) kappa2(select(pick(everything()), ends_with("_1"), ends_with("_2")))$value else NA_real_,
+        n = n(),
+        .groups = "drop"
+      ) %>%
+      mutate(model_pair = paste(pair, collapse = "_"))
+    
+    all_results[[paste(pair, collapse = "_")]] <- kappa_by_cat
+  }
+  
+  bind_rows(all_results)
+}
+
+column <- "new_type_ad"
+category_kappas <- agreement_by_category(models, column = column)
+
+
+ggplot(category_kappas, aes(x = category, y = kappa, fill = model_pair)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_text(aes(label = round(kappa, 2)), position = position_dodge(0.8), vjust = -0.3, size = 3) +
+  labs(
+    title = "Model Agreement by Brand Category",
+    subtitle = paste0("Cohen's Kappa for ", column, " across model pairs"),
+    x = "Brand Category", y = "Kappa Agreement"
+  ) +
+  ylim(0, 1) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# next steps:
+# - compare model-model agreement with human-human agreement
+# - find ads where all models give a different label or no model matches human consensus
+# - do bootstrapping also by category?
 
 
 
