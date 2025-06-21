@@ -9,59 +9,19 @@ library(boot)
 root_folder <- "C:/Users/P70090005/Documents/AI-validation/gpu outputs/"
 
 ###### START ANALYSIS HERE
-#original_labeling <- read_excel(paste(root_folder, "validation results/original_coding.xlsx", sep=""))
-dig_coding <- read_excel(paste(root_folder, "digital_coding_clean.xlsx", sep=""))
 
-### LOAD THE AI-LABELLED DATA
+# LOAD THE AI-LABELLED DATA
 gemma <- read_excel(paste(root_folder, "gemma_all_1000.xlsx", sep=""))
 gpt <- read_excel(paste(root_folder, "gpt_all_1000.xlsx", sep=""))
 pixtral <- read_excel(paste(root_folder, "pixtral_all_1000.xlsx", sep=""))
 qwen <- read_excel(paste(root_folder, "qwen_all_1000.xlsx", sep=""))
-sum(duplicated(pixtral$img_id))
-
-
-dig_coding <- dig_coding[dig_coding$img_id %in% gemma$img_id, ]
-dig_coding <- dig_coding[order(dig_coding$img_id), ]
-dig_coding[] <- lapply(dig_coding, as.character)
-
-gemma <- gemma[gemma$img_id %in% qwen$img_id, ]
-
-# create new ad_types and who_cats based on whether there is alcohol
-alcohol_changes <- function(df) {
-  # adjust type_ad: overwrite with "9" if is_alcohol == 1
-  df[["new_type_ad"]] <- ifelse(df[["is_alcohol"]] == 1, "9", df[["type_ad"]])
-  
-  # adjust who_cat: append "A" or replace with "A" if NA/empty
-  df[["new_who_cat"]] <- ifelse(
-    df[["is_alcohol"]] == 1,
-    ifelse(is.na(df[["who_cat"]]) | df[["who_cat"]] == "",
-           "A",
-           paste("A", df[["who_cat"]], sep = ", ")),
-    df[["who_cat"]]
-  )
-  
-  return(df)
-}
-
-gemma <- alcohol_changes(gemma)
-#qwen <- alcohol_changes(qwen)
-pixtral <- alcohol_changes(pixtral)
-gpt <- alcohol_changes(gpt)
-
-
-# sort each dataframe by img_id
-gemma <- gemma[order(gemma$img_id), ]
-gpt <- gpt[order(gpt$img_id), ]
-pixtral <- pixtral[order(pixtral$img_id), ]
-qwen <- qwen[order(qwen$img_id), ]
-
-gemma$model <- "gemma"
-gpt$model <- "gpt"
-pixtral$model <- "pixtral"
-qwen$model <- "qwen"
 models <- list(gemma = gemma, pixtral = pixtral, gpt = gpt, qwen = qwen)
 
-table(qwen$new_who_cat)
+# dig_coding <- read_excel(paste(root_folder, "digital_coding_clean.xlsx", sep=""))
+# dig_coding <- dig_coding[dig_coding$img_id %in% gemma$img_id, ]
+# dig_coding <- dig_coding[order(dig_coding$img_id), ]
+# dig_coding[] <- lapply(dig_coding, as.character)
+
 
 # ==============================================================================
 # VALIDATION OF SINGLE-CHOICE COLUMNS
@@ -245,10 +205,6 @@ ggsave(paste(root_folder, "tt/single_choice_bootsr_kappa.png", sep=""), width = 
 
 # ==============================================================================
 # VALIDATION OF MULTIPLE CHOICE COLUMNS
-
-# Jaccard similarity measures how much two models agree on the set of labels they assign to the same ad
-# example: model1 = {1, 2} ; model2 = {2, 3}
-# intersection = {2}, union = {1, 2, 3} => Jaccard = 1 / 3 = 0.33
 jaccard_similarity <- function(str1, str2) {
   set1 <- trimws(unlist(strsplit(str1, ",")))
   set2 <- trimws(unlist(strsplit(str2, ",")))
@@ -298,7 +254,7 @@ multi_summary <- bind_rows(lapply(multi_results, function(res) {
     question = res$column,
     t(as.data.frame(res$pairwise_jaccard))
   )
-}), .id = NULL)
+}), .id = NULL)ge
 
 multi_long <- multi_summary %>%
   pivot_longer(
@@ -319,6 +275,13 @@ ggplot(multi_long, aes(x = pair, y = question, fill = jaccard)) +
 ggsave(paste(root_folder, "tt/jaccard_multilabel_heatmap.png", sep=""), width = 9, height = 5)
 
 
+# using intersection-over-union distance (jaccard)
+iou_distance <- function(str1, str2) {
+  sim <- jaccard_similarity(str1, str2)
+  if (is.na(sim)) return(NA)
+  return(1 - sim)
+}
+
 
 compare_krippendorff_alpha_multilabel <- function(colname, models) {
   valid_models <- models[sapply(models, function(df) colname %in% colnames(df))]
@@ -329,7 +292,7 @@ compare_krippendorff_alpha_multilabel <- function(colname, models) {
   
   # split marketing_str into separate rows per label
   df_long <- df_all %>%
-    mutate(!!colname := gsub("\\s+", "", .data[[colname]])) %>%  # Remove any spaces
+    mutate(!!colname := gsub("\\s+", "", .data[[colname]])) %>%  # remove any spaces
     separate_rows(!!sym(colname), sep = ",")
   
   # create binary data
@@ -401,7 +364,7 @@ multi_kripp_results <- lapply(multi_label_cols, function(col) {
 })
 multi_kripp_results <- bind_rows(multi_kripp_results)
 
-pairwise_summary <- multi_kripp_results %>%
+pairwise_sumary <- multi_kripp_results %>%
   group_by(variable, model_pair) %>%
   summarise(avg_kripp_alpha = mean(kripp_alpha, na.rm = TRUE), .groups = "drop")
 
@@ -417,40 +380,78 @@ ggplot(pairwise_summary, aes(x = model_pair, y = variable, fill = avg_kripp_alph
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 
-# confusion matrices
-addmargins(table(GPT=gpt$type_ad, Qwen=qwen$type_ad))
-addmargins(table(GPT=gpt$target_group, Gemma=gemma$target_group))
+
+
+compare_iou_krippendorff_alpha <- function(colname, models) {
+  valid_models <- models[sapply(models, function(df) colname %in% colnames(df))]
+  
+  df_all <- bind_rows(lapply(valid_models, function(df) {
+    df %>% select(img_id, model, all_of(colname))
+  }))
+  
+  # compute distances per image
+  all_ids <- unique(df_all$img_id)
+  models_used <- unique(df_all$model)
+  model_pairs <- combn(models_used, 2, simplify = FALSE)
+  
+  distance_matrix <- data.frame()
+  
+  for (img in all_ids) {
+    df_img <- df_all %>% filter(img_id == img)
+    for (pair in model_pairs) {
+      m1 <- pair[1]; m2 <- pair[2]
+      l1 <- df_img %>% filter(model == m1) %>% pull(!!colname)
+      l2 <- df_img %>% filter(model == m2) %>% pull(!!colname)
+      
+      if (length(l1) == 0 || length(l2) == 0) next
+      
+      dist <- iou_distance(l1, l2)
+      distance_matrix <- rbind(distance_matrix, data.frame(
+        img_id = img,
+        model_pair = paste(m1, m2, sep = "_vs_"),
+        distance = dist
+      ))
+    }
+  }
+  
+  # pivot to rater-pair × item matrix
+  df_wide <- distance_matrix %>%
+    pivot_wider(names_from = img_id, values_from = distance)
+  
+  # Custom Krippendorff’s Alpha (interval version)
+  kripp_alpha_interval <- function(data_matrix) {
+    data_matrix <- as.matrix(data_matrix)
+    Do <- 0; De <- 0; N <- 0
+    for (i in seq(ncol(data_matrix))) {
+      col <- data_matrix[, i]
+      col <- col[!is.na(col)]
+      if (length(col) < 2) next
+      combs <- combn(col, 2)
+      Do <- Do + sum((combs[1, ] - combs[2, ])^2)
+      N <- N + ncol(combs)
+    }
+    if (N == 0) return(NA)
+    Do <- Do / N
+    
+    all_vals <- unlist(data_matrix)
+    all_vals <- all_vals[!is.na(all_vals)]
+    if (length(all_vals) < 2) return(NA)
+    all_combs <- combn(all_vals, 2)
+    De <- sum((all_combs[1, ] - all_combs[2, ])^2) / ncol(all_combs)
+    
+    return(1 - Do / De)
+  }
+  
+  alpha_val <- kripp_alpha_interval(df_wide %>% select(-model_pair))
+  
+  return(data.frame(
+    variable = colname,
+    kripp_alpha_iou = alpha_val
+  ))
+}
 
 
 
-# look at the distribution of response time
-response_df <- bind_rows(
-  data.frame(model = "gemma", response_time = gemma$response_time),
-  data.frame(model = "gpt", response_time = gpt$response_time),
-  data.frame(model = "pixtral", response_time = pixtral$response_time),
-  #data.frame(model = "qwen", response_time = qwen$response_time)
-)
-
-ggplot(response_df, aes(x = model, y = response_time, fill = model)) +
-  geom_boxplot() +
-  scale_y_log10() +
-  theme_minimal() +
-  labs(title = "Response Time per Model (log scale)",
-       x = "Model",
-       y = "Response Time (log seconds)") +
-  theme(legend.position = "none")
-
-ggsave(paste(root_folder, "tt/response_time_distr.png", sep=""), width = 8, height = 5)
-
-response_df %>%
-  group_by(model) %>%
-  summarise(
-    mean_time = mean(response_time, na.rm = TRUE),
-    median_time = median(response_time, na.rm = TRUE),
-    sd_time = sd(response_time, na.rm = TRUE),
-    min_time = min(response_time, na.rm = TRUE),
-    max_time = max(response_time, na.rm = TRUE)
-  )
 
 # ==============================================================================
 # apply again bootstrapping

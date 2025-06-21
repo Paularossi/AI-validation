@@ -1,11 +1,243 @@
+
+library(readxl)
 library(dplyr)
-library(tidyr)
-library(irr)
-library(ggplot2)
 library(writexl)
 library(purrr)
-library(readxl)
 
+root_folder <- "C:/Users/P70090005/Documents/AI-validation/gpu outputs/"
+
+###### START ANALYSIS HERE
+#original_labeling <- read_excel(paste(root_folder, "validation results/original_coding.xlsx", sep=""))
+dig_coding <- read_excel(paste(root_folder, "digital_coding_clean.xlsx", sep=""))
+
+### LOAD THE AI-LABELLED DATA
+# Gemma
+gemma_old <- read_excel(paste(root_folder, "gemma_all.xlsx", sep=""))
+gemma1 <- read_excel(paste(root_folder, "gemma_20250512_022018.xlsx", sep=""))
+
+gemma1 <- gemma1[!is.na(gemma1$type_ad), ]
+
+gemma_old[names(gemma_old) != "response_time"] <- 
+  lapply(gemma_old[names(gemma_old) != "response_time"], as.character)
+
+gemma_all <- bind_rows(gemma_old, gemma1)
+sum(duplicated(gemma_all$img_id)) # check for duplicates
+
+write_xlsx(gemma_all, paste(root_folder, "gemma_all.xlsx", sep=""))
+
+sum(gemma1$response_time, na.rm = TRUE)/3600
+
+# Qwen
+qwen_old <- read_excel(paste(root_folder, "qwen_all.xlsx", sep=""))
+qwen1 <- read_excel(paste(root_folder, "qwen20250609_194509.xlsx", sep=""))
+
+qwen_old[names(qwen_old) != "response_time"] <- 
+  lapply(qwen_old[names(qwen_old) != "response_time"], as.character)
+
+qwen_all <- bind_rows(qwen_old, qwen1)
+qwen_all <- qwen_all[!is.na(qwen_all$type_ad), ]
+
+sum(duplicated(qwen_all$img_id)) # check for duplicates
+qwen_all <- qwen_all[!duplicated(qwen_all$img_id),]
+
+setdiff(gemma_all$img_id, qwen_all$img_id)
+setdiff(qwen_all$img_id, gemma_all$img_id)
+
+write_xlsx(qwen_all, paste(root_folder, "qwen_all.xlsx", sep=""))
+
+sum(qwen1$response_time, na.rm = TRUE)/3600
+
+
+temp <- qwen_all[sample(nrow(qwen_all), 70), ]
+sum(temp$response_time, na.rm = TRUE)/3600
+
+# GPT
+gpt_old <- read_excel(paste(root_folder, "gpt_all.xlsx", sep=""))
+gpt2 <- read_excel(paste(root_folder, "gpt_20250518_190311.xlsx", sep=""))
+
+gpt_old[names(gpt_old) != "response_time"] <- 
+  lapply(gpt_old[names(gpt_old) != "response_time"], as.character)
+
+gpt2 <- gpt2[!is.na(gpt2$type_ad), ]
+
+gpt_all <- bind_rows(gpt_old, gpt2)
+sum(duplicated(gpt_all$img_id)) # check for duplicates
+
+gpt_all <- gpt_all[!is.na(gpt_all$type_ad), ]
+
+write_xlsx(gpt_all, paste(root_folder, "gpt_all.xlsx", sep=""))
+sum(gpt2$response_time)/60
+
+# Pixtral
+pixtral1 <- read_excel(paste(root_folder, "pixtral_20250502_103532.xlsx", sep=""))
+pixtral2 <- read_excel(paste(root_folder, "pixtral_all.xlsx", sep=""))
+#pixtral3[names(pixtral3) != "response_time"] <- 
+#  lapply(pixtral3[names(pixtral3) != "response_time"], as.character)
+
+pixtral_all <- bind_rows(pixtral1, pixtral2)
+sum(duplicated(pixtral_all$img_id))
+
+write_xlsx(pixtral_all, paste(root_folder, "pixtral_all.xlsx", sep=""))
+
+
+setdiff(qwen_all$img_id, pixtral_all$img_id)
+setdiff(pixtral_all$img_id, qwen_all$img_id)
+
+
+# =============================================================================
+# for ad distribution
+root_folder <- "C:/Users/P70090005/Documents/AI-validation/data/"
+all_ads <- read_excel(paste(root_folder, "digital_coding_clean.xlsx", sep=""))
+ads_1000 <- read_excel(paste(root_folder, "new_aws_1000.xlsx", sep=""))
+languages <- read_excel(paste(root_folder, "language_flagging.xlsx", sep=""))
+brands <- read_excel(paste(root_folder, "Belgium brands.xlsx", sep=""))
+
+ads_by_cat <- all_ads %>% select(c(img_id, ad_creative_bodies.x, page_name, page_id)) %>%
+  #merge(languages, by.x = "img_id", by.y = "ad_id") %>%
+  merge(ads_1000, by = "img_id") %>%
+  merge(brands, by = "page_id") %>%
+  select(-c(ad_creative_bodies.x, page_name.x, page_name.y))
+
+write_xlsx(ads_by_cat, paste(root_folder, "3000_ads_by_cat_language.xlsx", sep=""))
+
+
+# ===== EQUAL SAMPLE SIZE BY CATEGORY ===== 
+length(unique(ads_by_cat$category)) # 16 different categories = 61/62 ads per cat
+nr_ads_to_select <- 400
+#nr_per_cat <- 1000 / 16 # to select 1000 ads
+nr_per_cat <- nr_ads_to_select / length(unique(ads_by_cat$category)) # to select 400 ads for the dietician
+
+# check the underrepresented categories (where nr ads < 63)
+cat_counts <- ads_by_cat %>% count(category)
+underrep_cats <- cat_counts %>% filter(n < nr_per_cat) %>% pull(category)
+overrep_cats <- cat_counts %>% filter(n >= nr_per_cat) %>% pull(category)
+
+# take all ads from the underrepresented cats
+underrep_ads <- ads_by_cat %>% filter(category %in% underrep_cats)
+nr_underrep <- nrow(underrep_ads)
+
+# target number per overrepresented categories
+sample_per_cat <- floor((nr_ads_to_select - nr_underrep) / length(overrep_cats))
+
+# sample from underrepr cats
+overrep_ads <- ads_by_cat %>% filter(category %in% overrep_cats) %>%
+  group_by(category) %>%
+  # sample_per_cat might be bigger than what's available for some borderline categories.
+  # If that's possible, replace `slice_sample(n = sample_per_cat)` with:
+  # slice_sample(n = min(n(), sample_per_cat))
+  slice_sample(n = sample_per_cat) %>%
+  ungroup()
+
+# bind the over and underrep ads together
+ads_subsample <- bind_rows(underrep_ads, overrep_ads)
+
+# distribute any remaining ads
+set.seed(12101999)
+remaining_ads <- ads_by_cat %>%anti_join(ads_subsample, by = "img_id")
+extra_16 <- remaining_ads %>% filter(language != "EN") %>% sample_n(nr_per_cat - nr_underrep)
+final_sample <- bind_rows(ads_subsample, extra_16)
+ 
+# final check
+final_sample %>% count(category)
+final_sample %>% count(language)
+
+final_sample <- final_sample[sample(1:nrow(final_sample)), ]
+rownames(final_sample) <- NULL
+
+write_xlsx(final_sample, paste(root_folder, "dietician_400_ads.xlsx", sep=""))
+
+# join dieticians add to get url from qualtrics
+prev <- read.csv(paste(root2, "images.csv", sep="")) # all images with url
+diet <- diet %>% mutate(img_id = paste0(img_id, ".png")) %>%
+  left_join(prev, by = 'img_id') %>%
+  select(-c("category", "page_id", "language.y", "page_name.y", "ad_bodies_clean.y", "max_count"))
+write.csv(diet, paste(root_folder, "dieticians_400_loop.csv", sep=""), row.names = FALSE)
+
+# =============================================================================
+# merge with previous data to get the url of the images
+root2 <- "//unimaas.nl/users/Employees/P70090005/data/Desktop/phd/ad libraries and brands/AI-validation/data/qualtrics survey - aws setup/"
+previous <- read.csv(paste(root2, "images_old.csv", sep=""))
+
+new <- read_excel(paste(root2, "new_aws_1000.xlsx", sep=""))
+
+new <- new %>% mutate(img_id = paste0(img_id, ".png")) %>%
+  left_join(previous, by = 'img_id') %>% 
+  select(-c("page_name.x", "ad_bodies_clean.y", "language.y"))
+
+write.csv(new, paste(root2, "images.csv", sep=""), row.names = FALSE)
+
+# separate by language
+new2 <- read.csv(paste(root2, "images.csv", sep=""))
+en <- new2 %>% filter(language == "EN") %>% select(-c("language"))
+nl <- new2 %>% filter(language == "NL") %>% select(-c("language"))
+fr <- new2 %>% filter(language == "FR") %>% select(-c("language"))
+both <- new2 %>% filter(language == "BOTH") %>% select(-c("language"))
+both <- both[sample(1:nrow(both)), ] # shuffle
+
+half <- floor(nrow(both) / 2)
+# split both languages in half
+both_nl <- both[1:half, ]
+both_fr <- both[(half + 1):nrow(both), ]
+
+# append back to each language
+nl <- bind_rows(nl, both_nl)
+fr <- bind_rows(fr, both_fr)
+
+write.csv(en, paste(root2, "images_en.csv", sep=""), row.names = FALSE)
+write.csv(fr, paste(root2, "images_fr.csv", sep=""), row.names = FALSE)
+write.csv(nl, paste(root2, "images_nl.csv", sep=""), row.names = FALSE)
+
+
+# =============================================================================
+### ===== HELPER FUNCTIONS FOR ADJUSTING THE LABELS =====
+root_folder <- "C:/Users/P70090005/Documents/AI-validation/gpu outputs/"
+gemma <- read_excel(paste(root_folder, "gemma_all_1000.xlsx", sep=""))
+pixtral <- read_excel(paste(root_folder, "pixtral_all_1000.xlsx", sep=""))
+gpt <- read_excel(paste(root_folder, "gpt_all_1000.xlsx", sep=""))
+qwen <- read_excel(paste(root_folder, "qwen_all.xlsx", sep=""))
+
+
+# create new ad_types and who_cats based on whether there is alcohol
+alcohol_changes <- function(df) {
+  # adjust type_ad: overwrite with "9" if is_alcohol == 1hm 
+  df[["new_type_ad"]] <- ifelse(df[["is_alcohol"]] == 1, "9", df[["type_ad"]])
+  
+  # adjust who_cat: append "A" or replace with "A" if NA/empty
+  df[["new_who_cat"]] <- ifelse(
+    df[["is_alcohol"]] == 1,
+    ifelse(is.na(df[["who_cat"]]) | df[["who_cat"]] == "",
+           "A",
+           paste("A", df[["who_cat"]], sep = ", ")),
+    df[["who_cat"]]
+  )
+  
+  return(df)
+}
+
+gemma <- alcohol_changes(gemma)
+pixtral <- alcohol_changes(pixtral)
+gpt <- alcohol_changes(gpt)
+qwen <- alcohol_changes(qwen)
+
+gemma <- gemma[order(gemma$img_id), ]
+gpt <- gpt[order(gpt$img_id), ]
+pixtral <- pixtral[order(pixtral$img_id), ]
+qwen <- qwen[order(qwen$img_id), ]
+
+gemma$model <- "gemma"
+gpt$model <- "gpt"
+pixtral$model <- "pixtral"
+qwen$model <- "qwen"
+
+write_xlsx(gemma, paste(root_folder, "gemma_all_1000.xlsx", sep=""))
+write_xlsx(pixtral, paste(root_folder, "pixtral_all_1000.xlsx", sep=""))
+write_xlsx(gpt, paste(root_folder, "gpt_all_1000.xlsx", sep=""))
+write_xlsx(qwen, paste(root_folder, "qwen_all_1000.xlsx", sep=""))
+
+
+
+# =============================================================================
+### ===== PROCESSING THE SURVEY DATA =====
 
 root_folder <- "C:/Users/P70090005/Documents/survey results + invoices/prolific/"
 
@@ -58,8 +290,6 @@ nrow(responses_all)  # total number of worker-image answers
 n_distinct(responses_all$workerId)  # total number of unique participants
 
 ###========================================================================
-# add the tables from aws???
-
 
 # check duration per response
 ggplot(responses_all, aes(x = language, y = Duration_minutes)) +
@@ -74,7 +304,6 @@ ggsave("C:/Users/P70090005/Documents/AI-validation/gpu outputs/tt/survey_times.p
 # do a quick hypothesis test
 kruskal_test <- kruskal.test(Duration_minutes ~ language, data = responses_all)
 print(kruskal_test) # there seems to be a significant difference indeed
-
 
 
 variables <- c("ad_type", "alcohol", "non_alcohol", "target_group", "prem_offer", "marketing_str", "who_cat")
@@ -128,6 +357,12 @@ n_distinct(responses_long_all$Image_ID)  # total number of unique images
 # check which images have less than 3 codings
 responses_long_all %>% group_by(Image_ID) %>% count() %>%
   filter(n < 3)
+
+# ===== !!! REMOVE ADS WITH <3 CODINGS !!! ===== 
+responses_long_all <- responses_long_all %>%
+  group_by(Image_ID) %>%
+  filter(n() >= 3) %>%
+  ungroup()
 
 # now do the alcohol manipulation (new ad type and who_cat)
 responses_long_all <- responses_long_all %>%
@@ -299,297 +534,12 @@ responses_human_all <- left_join(responses_human_clean, responses_multi_clean, b
 # THIS IS THE MAIN DATAFRAME TO BASE THE ANALYSIS ON!!!
 write_xlsx(responses_human_all, paste(root_folder, "clean results all/responses_human_final.xlsx", sep=""))
 
-
 # ================ DATA PROCESSING ENDS HERE ========================
 
 
 
-# ==============================================================================
-# below, we have an analysis of agreement between humans only!!!!
-
-responses_human_all <- read_excel(paste(root_folder, "clean results all/responses_human_final.xlsx", sep=""))
-single_choice_vars <- c("ad_type", "new_type_ad", "target_group", "alcohol", "non_alcohol")
-
-# check the single choice questions
-compute_agreement_columns <- function(responses_wide, variable_cols) {
-  
-  results <- lapply(variable_cols, function(var_name) {
-    # auto-select the coder columns for this variable
-    coder_cols <- grep(paste0("^", var_name, "_coder[123]$"), names(responses_wide), value = TRUE)
-    
-    if (length(coder_cols) != 3) {
-      warning(paste("Skipping", var_name, ": found", length(coder_cols), "coder columns (expected 3)"))
-      return(NULL)
-    }
-    
-    human_matrix <- responses_wide %>%
-      select(all_of(coder_cols)) %>%
-      as.matrix()
-    
-    # Fleiss' Kappa
-    fleiss_result <- kappam.fleiss(human_matrix)
-    
-    # Full agreement prop
-    prop_full_agreement <- mean(apply(human_matrix, 1, function(x) length(unique(x)) == 1))
-    
-    data.frame(
-      variable = var_name,
-      fleiss_kappa = fleiss_result$value,
-      prop_full_agreement = prop_full_agreement
-    )
-  })
-  
-  bind_rows(results[!sapply(results, is.null)])
-}
 
 
-agreement_summary <- compute_agreement_columns(responses_wide = responses_wide_all, variable_cols = single_choice_vars)
-
-agreement_long <- agreement_summary %>%
-  pivot_longer(cols = c(fleiss_kappa, prop_full_agreement),
-               names_to = "metric", values_to = "value")
-
-ggplot(agreement_long, aes(x = variable, y = value, fill = metric)) +
-  geom_col(position = position_dodge(0.7), width = 0.6) +
-  geom_text(aes(label = round(value, 2)),
-            position = position_dodge(0.7), 
-            vjust = -0.3, size = 3.5) +
-  labs(title = "Inter-Human Agreement per Variable",
-       x = "Variable",
-       y = "Agreement Value",
-       fill = "Metric") +
-  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.1)) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-ggsave("C:/Users/P70090005/Documents/AI-validation/gpu outputs/tt/human_single_fleiss_kappa.png", width = 9, height = 5)
-
-
-# now for multi-label columns
-jaccard_similarity <- function(str1, str2) {
-  set1 <- trimws(unlist(strsplit(str1, ",")))
-  set2 <- trimws(unlist(strsplit(str2, ",")))
-  
-  intersection <- length(intersect(set1, set2))
-  union <- length(union(set1, set2))
-  
-  if (union == 0) return(NA)  # to handle empty annotations
-  return(intersection / union)
-}
-
-compute_multilabel_human_jaccard <- function(responses_wide_all, variable_list) {
-  
-  all_results <- lapply(variable_list, function(var_name) {
-    # Select coder columns for this variable (e.g., who_cat_coder1, who_cat_coder2, etc.)
-    coder_cols <- grep(paste0("^", var_name, "_coder[123]$"), names(responses_wide_all), value = TRUE)
-    
-    if (length(coder_cols) != 3) {
-      warning(paste("Skipping", var_name, ": found", length(coder_cols), "coder columns (expected 3)"))
-      return(NULL)
-    }
-    
-    # Build a dataframe similar to AI models format: each coder as a column
-    df <- responses_wide_all %>%
-      select(all_of(coder_cols))
-    
-    names(df) <- paste0("coder", 1:3)
-    
-    # Compute pairwise Jaccard similarities, just like AI function
-    model_pairs <- combn(names(df), 2, simplify = FALSE)
-    
-    avg_pairwise_jaccard <- sapply(model_pairs, function(pair) {
-      sims <- mapply(jaccard_similarity, df[[pair[1]]], df[[pair[2]]])
-      mean(sims, na.rm = TRUE)
-    })
-    
-    names(avg_pairwise_jaccard) <- sapply(model_pairs, function(p) paste(p, collapse = "_"))
-    
-    data.frame(
-      variable = var_name,
-      t(avg_pairwise_jaccard),
-      row.names = NULL
-    )
-  })
-  summary_table <- bind_rows(all_results[!sapply(all_results, is.null)])
-  
-  return(summary_table)
-}
-
-
-# Variables with multi-label answers
-multi_label_vars <- c("who_cat", "prem_offer", "marketing_str")
-
-# Run Jaccard agreement analysis for humans
-human_multilabel_jaccard <- compute_multilabel_human_jaccard(responses_wide_all, multi_label_vars)
-
-human_multilabel_jaccard <- human_multilabel_jaccard %>%
-  mutate(mean_jaccard = rowMeans(select(., starts_with("coder")), na.rm = TRUE))
-
-# Pivot coder pairs and mean into long format for plotting
-human_multilabel_jaccard_long <- human_multilabel_jaccard %>%
-  pivot_longer(cols = starts_with("coder"), names_to = "pair", values_to = "jaccard") %>%
-  bind_rows(
-    human_multilabel_jaccard %>%
-      select(variable, mean_jaccard) %>%
-      mutate(pair = "Mean") %>%
-      rename(jaccard = mean_jaccard)
-  )
-
-ggplot(human_multilabel_jaccard_long, aes(x = variable, y = jaccard, fill = pair)) +
-  geom_col(position = position_dodge(0.7), width = 0.6) +
-  geom_text(aes(label = round(jaccard, 2)),
-            position = position_dodge(0.7), 
-            vjust = -0.3, size = 3.5) +
-  scale_fill_manual(values = c(
-    "coder1_coder2" = "#66c2a5",  # greenish
-    "coder1_coder3" = "#fc8d62",  # orange
-    "coder2_coder3" = "#8da0cb",  # blueish
-    "Mean" = "#1b7837"            # dark green for mean
-  )) +
-  labs(title = "Human Agreement for Multi-Label Variables",
-       x = "Variable",
-       y = "Jaccard Similarity",
-       fill = "Pair / Mean") +
-  ylim(0, 1) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-ggsave("C:/Users/P70090005/Documents/AI-validation/gpu outputs/plots/human_mltpl_jaccard_sim.png", width = 9, height = 5)
-
-
-
-
-########## COMPARE HUMANS WITH THE AIS
-ai_mapping <- list(
-  "ad_type" = "type_ad",
-  "new_type_ad" = "type_ad",  # still compared to same AI col
-  "target_group" = "target_group",
-  "alcohol" = "is_alcohol"
-)
-
-human_mapping <- list(
-  "ad_type" = "ad_type_cons",
-  "new_type_ad" = "new_type_ad_cons",
-  "target_group" = "target_group_cons",
-  "alcohol" = "alcohol_cons"
-)
-
-compare_human_ai_kappa <- function(humans, models, ai_mapping, human_mapping) {
-  # Fix image IDs in human data
-  humans$Image_ID <- gsub("\\.png$", "", humans$Image_ID)
-  
-  results <- list()
-  
-  for (question in names(ai_mapping)) {
-    ai_column <- ai_mapping[[question]]
-    human_column <- human_mapping[[question]]
-    
-    for (model_name in names(models)) {
-      model_df <- models[[model_name]]
-      
-      # Safety check
-      if (!(ai_column %in% names(model_df)) || !(human_column %in% names(humans))) {
-        warning(paste("Missing:", ai_column, "or", human_column))
-        next
-      }
-      
-      # Join on image ID
-      merged <- merge(
-        humans[, c("Image_ID", human_column)],
-        model_df[, c("img_id", ai_column)],
-        by.x = "Image_ID", by.y = "img_id"
-      )
-      
-      # Drop rows with missing labels
-      merged <- merged[!is.na(merged[[human_column]]) & !is.na(merged[[ai_column]]), ]
-      
-      # Compute kappa
-      kappa_val <- if (nrow(merged) > 0) {
-        tryCatch({
-          irr::kappa2(merged[, c(human_column, ai_column)])$value
-        }, error = function(e) NA)
-      } else {
-        NA
-      }
-      
-      results[[length(results) + 1]] <- data.frame(
-        question = question,
-        model = model_name,
-        kappa = kappa_val
-      )
-    }
-  }
-  
-  return(do.call(rbind, results))
-}
-
-results_kappa <- compare_human_ai_kappa(responses_human_all, models, ai_mapping, human_mapping)
-print(results_kappa)
-
-ggplot(results_kappa, aes(x = question, y = kappa, fill = model)) +
-  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
-  geom_text(aes(label = round(kappa, 2)), 
-            position = position_dodge(width = 0.8), 
-            vjust = -0.3, size = 3) +
-  labs(
-    title = "Cohen's Kappa: Human Consensus vs AI Models",
-    x = "Question",
-    y = "Kappa Value"
-  ) +
-  scale_y_continuous(limits = c(0, 1)) +
-  theme_minimal() +
-  theme(
-    text = element_text(size = 12),
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.title = element_blank()
-  )
-ggsave("C:/Users/P70090005/Documents/AI-validation/gpu outputs/plots/human_ai_single.png", width = 9, height = 5)
-
-
-
-compare_multilabel_ai_vs_human <- function(human_df, ai_models, multi_label_vars) {
-  results <- list()
-  
-  for (question in multi_label_vars) {
-    human_col <- paste0(question, "_cons")
-    
-    for (model_name in names(ai_models)) {
-      ai_df <- ai_models[[model_name]]
-      
-      if (!(question %in% colnames(ai_df))) next
-      
-      df <- merge(
-        human_df[, c("Image_ID", human_col)],
-        ai_df[, c("img_id", question)],
-        by.x = "Image_ID", by.y = "img_id"
-      )
-      
-      sims <- mapply(jaccard_similarity, df[[human_col]], df[[question]])
-      mean_sim <- mean(sims, na.rm = TRUE)
-      
-      results[[length(results) + 1]] <- data.frame(
-        variable = question,
-        model = model_name,
-        jaccard = mean_sim
-      )
-    }
-  }
-  
-  do.call(rbind, results)
-}
-
-
-jaccard_summary <- compare_multilabel_ai_vs_human(responses_human_all, models, multi_label_vars)
-
-ggplot(jaccard_summary, aes(x = variable, y = jaccard, fill = model)) +
-  geom_bar(stat = "identity", position = position_dodge()) +
-  labs(
-    title = "Jaccard Similarity: Human vs AI (Multi-label Questions)",
-    x = "Question",
-    y = "Jaccard Similarity"
-  ) +
-  geom_text(aes(label = round(jaccard, 2)), position = position_dodge(0.9), vjust = -0.3) +
-  theme_minimal()
 
 
 
