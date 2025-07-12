@@ -6,7 +6,6 @@ library(irr)
 library(tidyverse)
 library(irrCAC) # to calculate Gwet's AC1/AC2 agreement coefficient
 library(psych) # for kappa confidence interval
-#library(rel) # for all sorts of agreement metrics - not available for this R version
 
 root_folder <- "C:/Users/P70090005/Desktop/phd/AI-validation/gpu outputs/"
 responses_human_all <- read_excel(paste(root_folder, "responses_human_final.xlsx", sep=""))
@@ -93,11 +92,11 @@ compare_human_ai_kappa <- function(humans, models, ai_mapping, human_mapping) {
         merged <- merged[!is.na(merged[[hc]]) & !is.na(merged[[ai_column]]), ]
         
         if (nrow(merged) > 0) {
-          kappa_val <- tryCatch({
-            kappa2(merged[, c(hc, ai_column)])$value
-          }, error = function(e) NA)
+          kappa2 <- cohen.kappa(merged[, c(hc, ai_column)]) # using psych package
+          gwet_coeff <- gwet.ac1.raw(merged[, c(hc, ai_column)])$est$coeff.val
+          prop_agreement <- gwet.ac1.raw(merged[, c(hc, ai_column)])$est$pa
+          gwet_ci <- gwet.ac1.raw(merged[, c(hc, ai_column)])$est$conf.int
           
-          agreement_val <- mean(merged[[hc]] == merged[[ai_column]], na.rm = TRUE)
         } else {
           kappa_val <- NA
           agreement_val <- NA
@@ -107,8 +106,12 @@ compare_human_ai_kappa <- function(humans, models, ai_mapping, human_mapping) {
           question = question,
           model = model_name,
           coder = hc,
-          kappa = kappa_val,
-          agreement = agreement_val
+          prop_agreement = prop_agreement,
+          kappa = kappa2$kappa,
+          kappa_conf_low = kappa2$confid[1, "lower"],
+          kappa_conf_upp = kappa2$confid[1, "upper"],
+          gwet_coeff = gwet_coeff,
+          gwet_ci = gwet_ci
         )
       }
     }
@@ -118,8 +121,14 @@ compare_human_ai_kappa <- function(humans, models, ai_mapping, human_mapping) {
 }
 
 results_kappa <- compare_human_ai_kappa(responses_human_all, models, ai_mapping, human_mapping)
-print(results_kappa)
+head(results_kappa)
 
+# unnest the conf int for gwet
+results_kappa <- results_kappa %>%
+  mutate(gwet_ci_low = as.numeric(sub("\\(([^,]+),.*", "\\1", gwet_ci)),
+         gwet_ci_upp = as.numeric(sub(".*,(.+)\\)", "\\1", gwet_ci))) 
+
+# pivot to long format for plotting
 plot_df <- results_kappa %>%
   mutate(rater = sub("^.+_(coder[1-3]|cons)$", "\\1", coder),
          rater = recode(rater,
@@ -129,15 +138,12 @@ plot_df <- results_kappa %>%
                         cons   = "Consensus"
          )) %>%
   pivot_longer(
-    cols = c(kappa, agreement),
+    cols = c(prop_agreement, kappa, gwet_coeff),
     names_to = "metric",
     values_to = "value"
   ) %>%
-  mutate(metric = recode(metric,
-                         kappa      = "Cohen's Kappa",
-                         agreement  = "% Agreement"
-  ))
-
+  mutate(metric = recode(metric, prop_agreement = "% Agreement", kappa = "Cohen's Kappa", 
+                         gwet_coeff = "Gwet's AC1"))
 
 
 ggplot(plot_df, aes(x = model, y = rater, fill = value)) +
@@ -160,6 +166,26 @@ ggplot(plot_df, aes(x = model, y = rater, fill = value)) +
   )
 
 ggsave(paste(root_folder, "plots/human_ai_single.png", sep=""), width = 9, height = 5)
+
+# plot with the confidence intervals
+plot_df_confint <- results_kappa %>%
+  pivot_longer(cols = c(kappa, gwet_coeff),
+               names_to = "metric", values_to = "value") %>%
+  mutate(
+    ci_low = ifelse(metric == "kappa", kappa_conf_low, gwet_ci_low),
+    ci_upp = ifelse(metric == "kappa", kappa_conf_upp, gwet_ci_upp),
+    metric = recode(metric, kappa = "Cohen's Kappa", gwet_coeff = "Gwet’s AC1"),
+    coder = sub("^.+_(coder[1-3]|cons)$", "\\1", coder)
+  )
+
+ggplot(plot_df_confint, aes(x = model, y = value, color = coder)) +
+  geom_point(position = position_dodge(width = 0.5)) +
+  geom_errorbar(aes(ymin = ci_low, ymax = ci_upp),
+                width = 0.2, position = position_dodge(width = 0.5)) +
+  facet_grid(metric ~ question) +
+  labs(y = "Agreement", x = "AI Model", color = "Rater") +
+  theme_minimal()
+
 
 
 # COMPARE EVERYTHING TOGETHER
@@ -338,27 +364,6 @@ MASI_simmilarity_matrix <- function(df, sep = ", ") {
 }
 
 
-# wt <- MASI_simmilarity_matrix(data.frame(gpt$prem_offer, qwen$prem_offer), sep = ", ")
-# krippen.alpha.raw(ratings=data.frame(gpt$prem_offer, qwen$prem_offer), weights = wt)$est
-# krippen.alpha.raw(ratings=data.frame(gpt$prem_offer, qwen$prem_offer))$est
-
-
-# Krippendorff's alpha calculation (with Jaccard distance function)
-kripp_alpha_interval <- function(data_matrix) { 
-  data_matrix <- as.matrix(data_matrix) 
-  # single‐pair case 
-  v <- data_matrix[1, ] 
-  v <- v[!is.na(v)] 
-  if (length(v) < 2) 
-    return(NA_real_) 
-  # observed disagreement = mean(v^2) 
-  Do <- sum(v^2) / length(v) 
-  # expected disagreement = mean squared differences of all pairs 
-  combs <- combn(v, 2) 
-  De <- sum((combs[1,] - combs[2,])^2) / ncol(combs) 
-  1 - Do/De 
-} 
-
 # Krippendorff's alpha using binary decomposition
 compute_kripp_alpha_binary <- function(human, ai, labels) {
   # build 2 × N matrix: rows = raters, cols = items
@@ -429,9 +434,10 @@ compare_multilabel_human_ai <- function(humans, models, multi_label_vars, consen
       # 1) avg Jaccard 
       sims <- mapply(jaccard_similarity, merged$label.x, merged$label.y) 
       jacc <- mean(sims, na.rm = TRUE) 
+      
       # 2) IoU‐alpha: build 1×N distance vector 
-      d <- 1 - sims 
-      alpha <- kripp_alpha_interval(matrix(d, nrow = 1)) 
+      # d <- 1 - sims 
+      # alpha <- kripp_alpha_interval(matrix(d, nrow = 1)) 
       
       # 3) binary Krippendorff's alpha
       # get all possible labels across human & ai strings
@@ -453,7 +459,7 @@ compare_multilabel_human_ai <- function(humans, models, multi_label_vars, consen
         rater1 = pair[1],
         rater2 = pair[2],
         jaccard = jacc, 
-        kripp_alpha_iou = alpha,
+        #kripp_alpha_iou = alpha,
         kripp_alpha_binary = alpha_bin,
         kripp_alpha_unweighted = alpha_unweighted$coeff.val,
         kripp_alpha_masi = alpha_masi$coeff.val,
@@ -461,16 +467,17 @@ compare_multilabel_human_ai <- function(humans, models, multi_label_vars, consen
       ) 
       idx <- idx + 1 
     }
-  } 
+  }
   
   bind_rows(out) 
-} 
+}
 
 res_ml <- compare_multilabel_human_ai(humans=responses_human_all, models = list(gpt=gpt, qwen=qwen), 
                                       multi_label_vars)
 
 plot_df_ml <- res_ml %>%
-  pivot_longer(cols = c(jaccard, kripp_alpha_iou, kripp_alpha_binary, kripp_alpha_unweighted), 
+  select(-c("kripp_alpha_iou", "kripp_alpha_unweighted")) %>%
+  pivot_longer(cols = c(jaccard, kripp_alpha_binary, kripp_alpha_masi), 
                names_to = "metric", values_to = "value") %>%
   mutate(
     rater1 = sub(".*_(coder[1-3]|cons)$", "\\1", rater1),
@@ -487,10 +494,9 @@ plot_df_ml <- res_ml %>%
                     coder3 = "Coder 3",
                     cons   = "Consensus",
                     .default = rater2),
-    metric = recode(metric,
-                                    jaccard             = "Jaccard Similarity",
-                                    kripp_alpha_binary  = "Krippendorff’s α (Binary)",
-                                    kripp_alpha_iou     = "Krippendorff’s α (IoU)")
+    metric = recode(metric, jaccard = "Jaccard Similarity",
+                    kripp_alpha_binary = "Krippendorff’s α (Binary)",
+                    kripp_alpha_masi = "Krippendorff’s α (MASI)")
   )
 
 
@@ -506,10 +512,10 @@ ggplot(plot_df_sym, aes(x = rater1, y = rater2, fill = value)) +
   facet_grid(metric ~ question, scales = "free", space = "free_x") +
   scale_fill_gradient2(
     low = "red", mid = "yellow", high = "darkgreen",
-    midpoint = 0, limits = c(-1, 1), name = "Agreement"
+    midpoint = 0.5, limits = c(0, 1), name = "Agreement"
   ) +
   labs(
-    title = "Agreement Across All Raters (Humans + AI Models, Multi-Label)",
+    title = "Agreement Across Various Raters (Multi-Label)",
     x = "Rater 1", y = "Rater 2"
   ) +
   theme_minimal(base_size = 12) +
@@ -520,7 +526,7 @@ ggplot(plot_df_sym, aes(x = rater1, y = rater2, fill = value)) +
   )
 
 
-ggsave(paste(root_folder, "plots/everything_multiple.png", sep=""), width = 10, height = 5)
+ggsave(paste(root_folder, "plots/selected_multiple.png", sep=""), width = 10, height = 6)
 
 
 
