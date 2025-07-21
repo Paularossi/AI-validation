@@ -58,6 +58,31 @@ human_mapping <- list(
   "marketing_str" = "marketing_str"
 )
 
+# labels for all questions
+label_df <- read.csv("C:/Users/P70090005/Desktop/phd/AI-validation/data/label_mappings.csv", 
+                     stringsAsFactors = FALSE, na = c(""))
+
+# function to merge data for a given column of ai models and human consensus
+merge_ai_human_column <- function(models, humans, column) {
+  model_names <- names(models)
+  
+  # extract relevant model columns
+  model_preds <- lapply(model_names, function(model) {
+    df <- models[[model]]
+    col <- ai_mapping[[column]]
+    df %>% select(img_id, !!sym(col)) %>% rename(!!model := !!sym(col))
+  }) %>% reduce(full_join, by = "img_id")
+  
+  # add human consensus
+  consensus_col <- paste0(human_mapping[[column]], "_cons")
+  human_cons <- humans %>%
+    select(img_id, consensus = !!sym(consensus_col), category)
+  
+  merged <- full_join(model_preds, human_cons, by = "img_id")
+  
+  return(merged)
+}
+
 
 # ====== SINGLE-CHOICE COLUMNS ======
 
@@ -155,7 +180,7 @@ ggplot(plot_df, aes(x = model, y = rater, fill = value)) +
     midpoint = 0.5, limits = c(0, 1), name = "Agreement"
   ) +
   labs(
-    title = "AI vs. Human Multi-Label Agreement",
+    title = "AI vs. Human Single-Choice Agreement",
     x = "AI Model", y = "Human Rater"
   ) +
   theme_minimal() +
@@ -178,18 +203,19 @@ plot_df_confint <- results_kappa %>%
     coder = sub("^.+_(coder[1-3]|cons)$", "\\1", coder)
   )
 
-ggplot(plot_df_confint, aes(x = model, y = value, color = coder)) +
+ggplot(plot_df_confint, aes(x = coder, y = value, color = model)) +
   geom_point(position = position_dodge(width = 0.5)) +
   geom_errorbar(aes(ymin = ci_low, ymax = ci_upp),
                 width = 0.2, position = position_dodge(width = 0.5)) +
   facet_grid(metric ~ question) +
-  labs(y = "Agreement", x = "AI Model", color = "Rater") +
+  labs(y = "Agreement", x = "AI Model", color = "Rater",
+       title = "Confidence Intervals of AI vs. Human Agreement") +
   theme_minimal()
 
-
+ggsave(paste(root_folder, "plots/human_ai_single_confint.png", sep=""), width = 9, height = 5)
 
 # COMPARE EVERYTHING TOGETHER
-compare_all_raters <- function(humans, models, ai_mapping, human_mapping, single_choice_vars) {
+compare_all_raters <- function(humans, models, single_choice_vars) {
   humans$Image_ID <- gsub("\\.png$", "", humans$Image_ID)
   
   results <- list()
@@ -226,15 +252,21 @@ compare_all_raters <- function(humans, models, ai_mapping, human_mapping, single
       
       if (nrow(merged) == 0) next
       
-      kappa_val <- tryCatch(kappa2(merged[, c("label.x", "label.y")])$value, error = function(e) NA)
-      agreement_val <- mean(merged$label.x == merged$label.y, na.rm = TRUE)
+      kappa2 <- cohen.kappa(merged[, c("label.x", "label.y")]) # using psych package
+      gwet_coeff <- gwet.ac1.raw(merged[, c("label.x", "label.y")])$est$coeff.val
+      prop_agreement <- gwet.ac1.raw(merged[, c("label.x", "label.y")])$est$pa
+      gwet_ci <- gwet.ac1.raw(merged[, c("label.x", "label.y")])$est$conf.int
       
       results[[length(results) + 1]] <- data.frame(
         question = question,
         rater1 = pair[1],
         rater2 = pair[2],
-        kappa = kappa_val,
-        agreement = agreement_val
+        prop_agreement = prop_agreement,
+        kappa = kappa2$kappa,
+        kappa_conf_low = kappa2$confid[1, "lower"],
+        kappa_conf_upp = kappa2$confid[1, "upper"],
+        gwet_coeff = gwet_coeff,
+        gwet_ci = gwet_ci
       )
     }
   }
@@ -242,10 +274,10 @@ compare_all_raters <- function(humans, models, ai_mapping, human_mapping, single
   return(bind_rows(results))
 }
 
-comparison_df <- compare_all_raters(responses_human_all, models, ai_mapping, human_mapping, single_choice_vars)
+comparison_df <- compare_all_raters(responses_human_all, models, single_choice_vars)
 
 plot_df <- comparison_df %>%
-  pivot_longer(cols = c(kappa, agreement), names_to = "metric", values_to = "value") %>%
+  pivot_longer(cols = c(kappa, prop_agreement, gwet_coeff), names_to = "metric", values_to = "value") %>%
   mutate(
     rater1 = sub(".*_(coder[1-3]|cons)$", "\\1", rater1),
     rater2 = sub(".*_(coder[1-3]|cons)$", "\\1", rater2),
@@ -261,7 +293,8 @@ plot_df <- comparison_df %>%
                     coder3 = "Coder 3",
                     cons   = "Consensus",
                     .default = rater2),
-    metric = recode(metric, kappa = "Cohen's Kappa", agreement = "% Agreement")
+    metric = recode(metric, kappa = "Cohen's Kappa", prop_agreement = "% Agreement",
+                    gwet_coeff = "Gwet's AC1")
   )
 
 plot_df_symmetric <- plot_df %>%
@@ -281,7 +314,7 @@ ggplot(plot_df_symmetric, aes(x = rater1, y = rater2, fill = value)) +
     midpoint = 0.5, limits = c(0, 1), name = "Agreement"
   ) +
   labs(
-    title = "Pairwise Agreement: Human and AI Raters",
+    title = "Agreement Across All Raters (Single-Choice)",
     x = "Rater 1", y = "Rater 2"
   ) +
   theme_minimal(base_size = 12) +
@@ -292,6 +325,29 @@ ggplot(plot_df_symmetric, aes(x = rater1, y = rater2, fill = value)) +
   )
 
 ggsave(paste(root_folder, "plots/everything_single.png", sep=""), width = 10, height = 5)
+
+comparison_df %>%
+  mutate(
+    across(where(is.numeric), ~round(.x, 2)),
+    rater1 = sub(".*_(coder[1-3]|cons)$", "\\1", rater1),
+    rater2 = sub(".*_(coder[1-3]|cons)$", "\\1", rater2),
+    rater1 = recode(rater1,
+                    coder1 = "Coder 1",
+                    coder2 = "Coder 2",
+                    coder3 = "Coder 3",
+                    cons   = "Consensus",
+                    .default = rater1),
+    rater2 = recode(rater2,
+                    coder1 = "Coder 1",
+                    coder2 = "Coder 2",
+                    coder3 = "Coder 3",
+                    cons   = "Consensus",
+                    .default = rater2),
+    kappa_conf = paste0("(", kappa_conf_low, ",", kappa_conf_upp, ")", sep="")) %>%
+  select(-c("kappa_conf_low", "kappa_conf_upp")) %>%
+  # save to excel
+  #write_xlsx(paste(root_folder, "plots/agreement_single_all.xlsx", sep=""))
+  DT::datatable(options = list(scrollX = TRUE))
 
 
 
@@ -462,7 +518,9 @@ compare_multilabel_human_ai <- function(humans, models, multi_label_vars, consen
         #kripp_alpha_iou = alpha,
         kripp_alpha_binary = alpha_bin,
         kripp_alpha_unweighted = alpha_unweighted$coeff.val,
+        kripp_alpha_unweighted_ci = alpha_unweighted$conf.int,
         kripp_alpha_masi = alpha_masi$coeff.val,
+        kripp_alpha_masi_ci = alpha_masi$conf.int,
         stringsAsFactors = FALSE 
       ) 
       idx <- idx + 1 
@@ -472,11 +530,11 @@ compare_multilabel_human_ai <- function(humans, models, multi_label_vars, consen
   bind_rows(out) 
 }
 
-res_ml <- compare_multilabel_human_ai(humans=responses_human_all, models = list(gpt=gpt, qwen=qwen), 
-                                      multi_label_vars)
+res_ml <- compare_multilabel_human_ai(humans=responses_human_all, models, 
+                                      multi_label_vars, consensus = FALSE)
 
 plot_df_ml <- res_ml %>%
-  select(-c("kripp_alpha_iou", "kripp_alpha_unweighted")) %>%
+  select(-kripp_alpha_unweighted) %>%
   pivot_longer(cols = c(jaccard, kripp_alpha_binary, kripp_alpha_masi), 
                names_to = "metric", values_to = "value") %>%
   mutate(
@@ -508,14 +566,14 @@ plot_df_sym <- plot_df_ml %>%
 
 ggplot(plot_df_sym, aes(x = rater1, y = rater2, fill = value)) +
   geom_tile(color = "white") +
-  geom_text(aes(label = round(value, 2)), size = 2.75) +
+  geom_text(aes(label = round(value, 2)), size = 2.9) +
   facet_grid(metric ~ question, scales = "free", space = "free_x") +
   scale_fill_gradient2(
     low = "red", mid = "yellow", high = "darkgreen",
     midpoint = 0.5, limits = c(0, 1), name = "Agreement"
   ) +
   labs(
-    title = "Agreement Across Various Raters (Multi-Label)",
+    title = "Agreement Across All Raters (Multi-Label)",
     x = "Rater 1", y = "Rater 2"
   ) +
   theme_minimal(base_size = 12) +
@@ -526,9 +584,43 @@ ggplot(plot_df_sym, aes(x = rater1, y = rater2, fill = value)) +
   )
 
 
-ggsave(paste(root_folder, "plots/selected_multiple.png", sep=""), width = 10, height = 6)
+ggsave(paste(root_folder, "plots/everything_multiple.png", sep=""), width = 10, height = 6)
 
-
+res_ml %>%
+  mutate(
+    across(where(is.numeric), ~round(.x, 2)),
+    rater1 = sub(".*_(coder[1-3]|cons)$", "\\1", rater1),
+    rater2 = sub(".*_(coder[1-3]|cons)$", "\\1", rater2),
+    rater1 = recode(rater1,
+                    coder1 = "Coder 1",
+                    coder2 = "Coder 2",
+                    coder3 = "Coder 3",
+                    cons   = "Consensus",
+                    .default = rater1),
+    rater2 = recode(rater2,
+                    coder1 = "Coder 1",
+                    coder2 = "Coder 2",
+                    coder3 = "Coder 3",
+                    cons   = "Consensus",
+                    .default = rater2)) %>%
+  # save to excel
+  #write_xlsx(paste(root_folder, "plots/agreement_multiple_all.xlsx", sep=""))
+  DT::datatable(options = list(scrollX = TRUE))
+  
+  # to save the table as an image:
+  # gt() %>%
+  # fmt_number(
+  #   columns = where(is.numeric),
+  #   decimals = 2
+  # ) %>%
+  # data_color(
+  #   columns = where(is.numeric),
+  #   colors = scales::col_numeric(
+  #     palette = c("red", "yellow", "green"),
+  #     domain = c(0, 1)
+  #   )
+  # ) %>%
+  # gtsave(paste(root_folder, "plots/res_ml_table.png", sep=""))
 
 
 
@@ -537,7 +629,7 @@ ggsave(paste(root_folder, "plots/selected_multiple.png", sep=""), width = 10, he
 table(responses_human_all$category)
 
 # how consistent are AI models in different product categories?
-agreement_by_category_single <- function(models, column, humans = NULL) {
+agreement_by_category_all <- function(models, column, humans = NULL, multiple = FALSE) {
   raters <- list()
   
   # add all AI models
@@ -554,7 +646,7 @@ agreement_by_category_single <- function(models, column, humans = NULL) {
     consensus_col <- paste0(human_col, "_cons")
     
     if (consensus_col %in% names(humans)) {
-      df <- humans[, c("Image_ID", "category", consensus_col)]
+      df <- humans[, c("img_id", "category", consensus_col)]
       colnames(df) <- c("img_id", "category", "label")
       df$model <- "consensus"
       raters[["consensus"]] <- df
@@ -578,73 +670,138 @@ agreement_by_category_single <- function(models, column, humans = NULL) {
     
     if (nrow(merged) == 0) next
     
-    kappa_df <- merged %>%
-      group_by(category) %>%
-      summarise(
-        kappa = kappa2(data.frame(label_1, label_2))$value,
-        kappa2 = cohen.kappa(data.frame(label_1, label_2))$kappa,
-        weight_kappa2 = cohen.kappa(data.frame(label_1, label_2))$weighted.kappa,
-        #prop_agreement = mean(label_1 == label_2, na.rm = TRUE),
-        gwet_coeff = gwet.ac1.raw(data.frame(label_1, label_2))$est$coeff.val,
-        prop_agreement = gwet.ac1.raw(data.frame(label_1, label_2))$est$pa,
-        gwet_ci = gwet.ac1.raw(data.frame(label_1, label_2))$est$conf.int,
-        n = n(),
-        .groups = "drop"
-      ) %>%
-      mutate(model_pair = paste(pair, collapse = "_"))
-    
-    results[[paste(pair, collapse = "_")]] <- kappa_df
+    if (!multiple) { # single-choice columns
+      kappa_df <- merged %>%
+        group_by(category) %>%
+        summarise(
+          kappa2 = cohen.kappa(data.frame(label_1, label_2))$kappa,
+          kappa_conf_low = cohen.kappa(data.frame(label_1, label_2))$confid[1, "lower"],
+          kappa_conf_upp = cohen.kappa(data.frame(label_1, label_2))$confid[1, "upper"],
+          gwet_coeff = gwet.ac1.raw(data.frame(label_1, label_2))$est$coeff.val,
+          prop_agreement = gwet.ac1.raw(data.frame(label_1, label_2))$est$pa,
+          gwet_ci = gwet.ac1.raw(data.frame(label_1, label_2))$est$conf.int,
+          n = n(),
+          .groups = "drop"
+        ) %>%
+        mutate(gwet_ci_low = as.numeric(sub("\\(([^,]+),.*", "\\1", gwet_ci)),
+               gwet_ci_upp = as.numeric(sub(".*,(.+)\\)", "\\1", gwet_ci)),
+               model_pair = paste(pair, collapse = "_")) 
+      
+      results[[paste(pair, collapse = "_")]] <- kappa_df
+    } else { # multi-label columns
+      all_labels <- unique(unlist(strsplit(
+        na.omit(c(merged$label_1, merged$label_2)), split = ",\\s*"
+      )))
+      
+      multi_agreement <- merged %>%
+        group_by(category) %>%
+        summarise(
+          jacc = mean(jaccard_similarity(label_1, label_2), na.rm = TRUE),
+          alpha_bin = compute_kripp_alpha_binary(label_1, label_2, all_labels),
+          alpha_unweighted = krippen.alpha.raw(ratings=data.frame(label_1, label_2))$est$coeff.val,
+          alpha_masi = krippen.alpha.raw(ratings=data.frame(label_1, label_2), 
+                                         weights = MASI_simmilarity_matrix(data.frame(label_1, label_2), sep = ", "))$est$coeff.val,
+          alpha_masi_ci = krippen.alpha.raw(ratings=data.frame(label_1, label_2), 
+                                         weights = MASI_simmilarity_matrix(data.frame(label_1, label_2), sep = ", "))$est$conf.int,
+          n = n(),
+          .groups = "drop"
+        ) %>%
+        mutate(alpha_ci_low = as.numeric(sub("\\(([^,]+),.*", "\\1", alpha_masi_ci)),
+               alpha_ci_upp = as.numeric(sub(".*,(.+)\\)", "\\1", alpha_masi_ci)),
+               model_pair = paste(pair, collapse = "_")) 
+      
+      results[[paste(pair, collapse = "_")]] <- multi_agreement
+    }
   }
   
   bind_rows(results)
 }
 
 
-
-
-category_agreement_all <- lapply(single_choice_vars, function(col) {
-  df <- agreement_by_category_single(models = list(gpt = gpt, qwen = qwen), column = col, humans = humans)
+category_agreement_single <- lapply(single_choice_vars, function(col) {
+  df <- agreement_by_category_all(models = list(gpt = gpt, qwen = qwen), 
+                                  column = col, humans = responses_human_all)
   df$question <- col
   df
 }) %>% bind_rows()
 
-# just for one question
-category_agreement_single <- agreement_by_category_single(models = list(gpt = gpt, qwen = qwen), 
-                                                   column = single_choice_vars[3])
+category_agreement_multiple <- lapply(multi_label_vars, function(col) {
+  df <- agreement_by_category_all(models = list(gpt = gpt, qwen = qwen), column = col, 
+                                  humans = responses_human_all, multiple = TRUE)
+  df$question <- col
+  df
+}) %>% bind_rows()
 
 
-ggplot(category_agreement_all, aes(x = category, y = kappa, fill = model_pair)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  geom_text(aes(label = round(kappa, 2)), 
-            position = position_dodge(width = 0.9), vjust = -0.5, size = 2.5) +
-  #facet_wrap(~ question, scales = "free_x") +
-  theme_minimal(base_size = 12) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(
-    title = "Model Agreement by Brand Category",
-    subtitle = "Cohen's Kappa per Question and Model Pair",
-    y = "Kappa Agreement",
-    x = "Brand Category"
-  )
+# single choice
+category_agreement_single %>%
+  #filter(model_pair != "gpt_qwen") %>%
+  filter(question == "target_group") %>%
+  ggplot(aes(x = category, y = gwet_coeff, fill = model_pair)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    geom_text(aes(label = round(gwet_coeff, 2)), 
+              position = position_dodge(width = 0.9), vjust = 3.5, size = 2.5) +
+    geom_errorbar(aes(ymin = gwet_ci_low, ymax = gwet_ci_upp),
+                  width = 0.2, position = position_dodge(width = 0.9)) +
+    #facet_wrap(~ question, scales = "free_x") +
+    theme_minimal(base_size = 12) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(
+      title = "Model Agreement by Brand Category - Target Group",
+      y = "Gwet's AC Agreement",
+      x = "Brand Category"
+    )
+
+ggsave(paste(root_folder, "plots/brand_gwet_target_group_single.png", sep=""), width = 10, height = 6)
 
 
-ggplot(category_kappas, aes(x = model_pair, y = category, fill = kappa)) +
-  geom_tile(color = "white") +
-  geom_text(aes(label = round(kappa, 2)), size = 3) +
-  scale_fill_gradient2(low = "red", mid = "yellow", high = "darkgreen",
-                       midpoint = 0.5, limits = c(0, 1), name = "Kappa") +
-  theme_minimal() +
-  labs(title = "Model Agreement (Kappa) by Brand Category",
-       x = "Model Pair", y = "Category")
+# multi-label
+overall_alphas <- res_ml %>%
+  filter(question == "prem_offer", rater1 != "gpt") %>%
+  select(rater2, kripp_alpha_masi)
+alpha_gpt <- overall_alphas %>% filter(rater2 == "gpt") %>% pull(kripp_alpha_masi)
+alpha_qwen <- overall_alphas %>% filter(rater2 == "qwen") %>% pull(kripp_alpha_masi)
+
+
+category_agreement_multiple %>%
+  mutate(category_n = paste0(category, " (", n, ")")) %>%
+  #filter(model_pair != "gpt_qwen") %>%
+  filter(question == "prem_offer") %>%
+  ggplot(aes(x = category_n, y = alpha_masi, fill = model_pair)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    geom_text(aes(label = round(alpha_masi, 2)), 
+              position = position_dodge(width = 0.9), vjust = -0.5, size = 2.5) +
+    geom_errorbar(aes(ymin = alpha_ci_low, ymax = alpha_ci_upp),
+                  width = 0.2, position = position_dodge(width = 0.9)) +
+    annotate("text", x = Inf, y = Inf,
+             label = paste0("GPT vs Consensus α = ", round(alpha_gpt, 2)),
+             hjust = 1, vjust = 26, size = 4, fontface = "italic") +
+    annotate("text", x = Inf, y = Inf,
+             label = paste0("Qwen vs Consensus α = ", round(alpha_qwen, 2)),
+             hjust = 1, vjust = 28, size = 4, fontface = "italic") +
+    #facet_wrap(~ question, scales = "free_x") +
+    theme_minimal(base_size = 12) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    #ylim(-0.6, 1) +
+    labs(
+      title = "Model Agreement by Brand Category - Premium Offers",
+      y = "Krippendorff's Alpha (MASI)",
+      x = "Brand Category"
+    ) 
+  
+
+ggsave(paste(root_folder, "plots/brand_alpha_prem_offer.png", sep=""), width = 10, height = 6)
+
+# find some categories to analyze more in detail, for ex. online ordering and sweet 
+# biscuits have really low agreement for who_cat
 
 
 
 
-
-top_bottom <- category_agreement_all %>%
-  group_by(category, question) %>%
-  summarise(avg_kappa = mean(kappa, na.rm = TRUE)) %>%
-  arrange(avg_kappa)
+top_bottom <- category_agreement_multiple %>%
+  group_by(category, question, model_pair) %>%
+  summarise(avg_alpha_masi = mean(alpha_masi, na.rm = TRUE)) %>%
+  arrange(avg_alpha_masi)
 
 head(top_bottom, 5)    # worst categories
 tail(top_bottom, 5) 
@@ -652,7 +809,7 @@ tail(top_bottom, 5)
 
 # next steps:
 # - compare model-model agreement with human-human agreement
-# - find ads where all models give a different label or no model matches human consensus
+
 
 
 table(gpt$new_type_ad, responses_human_all$new_type_ad_cons)
@@ -660,47 +817,198 @@ table(gpt$new_type_ad, responses_human_all$new_type_ad_cons)
 
 
 
+# - find ads where all models give a different label or no model matches human consensus
+find_disagreeing_ads <- function(models, column, humans) {
+  
+  merged <- merge_ai_human_column(models, humans, column)
+  
+  # keep rows where no model matches consensus
+  disagreed <- merged %>%
+    rowwise() %>%
+    mutate(
+      n_match = sum(c_across(all_of(names(models))) == consensus, na.rm = TRUE)
+    ) %>%
+    ungroup() %>%
+    filter(!is.na(consensus), n_match == 0)
+  
+  return(disagreed)
+}
+
+
+disagreed_ads_single <- lapply(single_choice_vars, function(col) {
+  df <- find_disagreeing_ads(models = list(gpt = gpt, qwen = qwen), 
+                             column = col, humans = responses_human_all)
+  df$question <- col
+  df
+}) %>% bind_rows()
+
+#disagreed_ads_adtype %>% group_by(category) %>% count() %>% arrange(desc(n))
+
+# !!! doesn't really make sense for multiple columns
+disagreed_ads_multiple <- lapply(multi_label_vars, function(col) {
+  df <- find_disagreeing_ads(models = list(gpt = gpt, qwen = qwen), 
+                             column = col, humans = responses_human_all)
+  df$question <- col
+  df
+}) %>% bind_rows()
+
+
+
+# by label for single columns 
+single_disagreement_by_label <- function(models, humans, column) {
+  
+  merged <- merge_ai_human_column(models, humans, column) %>%
+    filter(!is.na(consensus))  # remove rows with no consensus
+  
+  merged %>% filter(gemma == "8")
+  
+  # count for each consensus label
+  results <- merged %>%
+    rowwise() %>%
+    mutate(
+      n_match = sum(c_across(all_of(names(models))) == consensus, na.rm = TRUE),
+      all_failed = n_match == 0,
+      across(all_of(names(models)), ~ .x != consensus, .names = "failed_{.col}")
+    ) %>%
+    ungroup() %>%
+    group_by(consensus) %>%
+    summarise(
+      total = n(),
+      n_all_failed = sum(all_failed),
+      pct_all_failed = mean(all_failed),
+      across(starts_with("failed_"), list(
+        n = ~sum(.x, na.rm = TRUE),
+        pct = ~mean(.x, na.rm = TRUE)
+      )),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(pct_all_failed))
+  
+  return(results)
+}
+
+
+disagreed_by_label_single <- lapply(single_choice_vars, function(col) {
+  df <- single_disagreement_by_label(models = models, 
+                             humans = responses_human_all, column = col)
+  df$question <- col
+  df
+}) %>% bind_rows()
+
+# 1. which labels are most missed overall? (pct_all_failed) - ambiguity in visual/textual cues.
+# 2. which model misses more?
+
+plot_df <- disagreed_by_label_single %>%
+  left_join(label_df, by = join_by(consensus == code, question == category)) %>%
+  filter(question == "target_group") %>%
+  select(consensus, failed_gpt_pct, failed_qwen_pct, failed_pixtral_pct, failed_gemma_pct, text_label, total) %>%
+  pivot_longer(-c("consensus", "text_label", "total"), names_to = "model", values_to = "pct_failed") %>%
+  mutate(model = recode(model,
+                        failed_gpt_pct = "GPT",
+                        failed_qwen_pct = "Qwen",
+                        failed_pixtral_pct = "Pixtral",
+                        failed_gemma_pct = "Gemma"))
+
+ggplot(plot_df, aes(x = model, y = reorder(text_label, -pct_failed), fill = pct_failed)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = paste(round(pct_failed, 2), " (", total, ")", sep="")), size = 4) +
+  scale_fill_gradient2(
+    low = "darkgreen", mid = "yellow", high = "red", midpoint = 0.5, limits = c(0, 1))+
+  labs(title = "Missed Consensus Labels by Model and Label (Target Group)",
+       x = "Model", y = "Label Code", fill = "% Missed") +
+  theme_minimal()
+
+ggsave(paste(root_folder, "plots/ai_missed_target_group.png", sep=""), width = 10, height = 6)
 
 
 
 
-#=========== COMPARE DISAGREEMENTS
-# extract_single_choice_disagreements <- function(humans, models) {
-#   disagreements <- list()
-#   
-#   for (question in single_choice_vars) {
-#     ai_col <- ai_mapping[[question]]
-#     human_base <- human_mapping[[question]]
-#     
-#     human_cols <- grep(paste0("^", human_base, "_(coder[1-3]|cons)$"), names(humans), value = TRUE)
-#     
-#     for (hc in human_cols) {
-#       for (model_name in names(models)) {
-#         model_df <- models[[model_name]]
-#         if (!(ai_col %in% names(model_df))) next
-#         
-#         merged <- merge(
-#           humans[, c("img_id", hc)],
-#           model_df[, c("img_id", ai_col)],
-#           by = "img_id"
-#         ) %>%
-#           rename(human = !!hc, ai = !!ai_col) %>%
-#           filter(!is.na(human), !is.na(ai), human != ai) %>%
-#           mutate(
-#             question = question,
-#             model = model_name,
-#             coder = hc
-#           )
-#         
-#         disagreements[[length(disagreements) + 1]] <- merged[, c("img_id", "question", "coder", "model", "human", "ai")]
-#       }
-#     }
-#   }
-#   bind_rows(disagreements)
-# }
-# 
-# temp <- extract_single_choice_disagreements(responses_human_all, models)
+# MULTI-LABEL
+multi_disagreement_by_label <- function(models, humans, column) {
+  
+  merged <- merge_ai_human_column(models, humans, column) %>%
+    filter(!is.na(consensus))  # filter empty rows
+  
+  # get unique labels from consensus
+  all_labels <- unique(unlist(strsplit(merged$consensus, ",\\s*")))
+  all_labels <- all_labels[all_labels != ""]
+  
+  results <- list()
+  
+  for (label in all_labels) {
+    rows_with_label <- merged %>%
+      filter(grepl(paste0("(^|,\\s*)", label, "(\\s*,|$)"), consensus))
+    
+    n_total <- nrow(rows_with_label)
+    
+    if (n_total == 0) next
+    
+    # check if label is present in any model output
+    n_failed_all <- rows_with_label %>%
+      rowwise() %>%
+      mutate(
+        n_match = sum(sapply(names(models), function(m) {
+          grepl(paste0("(^|,\\s*)", label, "(\\s*,|$)"), get(m))
+        })),
+        all_failed = n_match == 0,
+        across(all_of(names(models)), ~ !grepl(paste0("(^|,\\s*)", label, "(\\s*,|$)"), .x), .names = "failed_{.col}")
+      ) %>%
+      ungroup()
+    
+    summary_counts <- n_failed_all %>%
+      summarise(
+        n_all_failed = sum(all_failed),
+        across(starts_with("failed_"), sum)
+      )
+    
+    results[[label]] <- data.frame(
+      label = label,
+      n = n_total,
+      n_all_failed = summary_counts$n_all_failed,
+      pct_all_failed = summary_counts$n_all_failed / n_total,
+      # add per-model missed counts and percentages
+      do.call(cbind, lapply(names(models), function(m) {
+        n_failed <- summary_counts[[paste0("failed_", m)]]
+        setNames(
+          data.frame(n_failed, n_failed / n_total),
+          c(paste0("n_", m, "_failed"), paste0("pct_", m, "_failed"))
+        )
+      }))
+    )
+  }
+  
+  bind_rows(results) %>% arrange(desc(pct_all_failed))
+}
 
+disagreed_by_label_multiple <- lapply(multi_label_vars, function(col) {
+  df <- multi_disagreement_by_label(models = models, 
+                                     humans = responses_human_all, column = col)
+  df$question <- col
+  df
+}) %>% bind_rows()
+
+
+plot_df <- disagreed_by_label_multiple %>%
+  left_join(label_df, by = join_by(label == code, question == category)) %>%
+  filter(question == "marketing_str") %>%
+  select(label, pct_gpt_failed, pct_qwen_failed, pct_pixtral_failed, pct_gemma_failed, text_label, n) %>%
+  pivot_longer(-c("label", "text_label", "n"), names_to = "model", values_to = "pct_failed") %>%
+  mutate(model = recode(model,
+                        pct_gpt_failed = "GPT",
+                        pct_qwen_failed = "Qwen",
+                        pct_pixtral_failed = "Pixtral",
+                        pct_gemma_failed = "Gemma"))
+
+ggplot(plot_df, aes(x = model, y = reorder(text_label, -pct_failed), fill = pct_failed)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = paste(round(pct_failed, 2), " (", n, ")", sep="")), size = 4) +
+  scale_fill_gradient2(
+    low = "darkgreen", mid = "yellow", high = "red", midpoint = 0.5, limits = c(0, 1))+
+  labs(title = "Missed Consensus Labels by Model and Label (Marketing Strategies)",
+       x = "Model", y = "Label Code", fill = "% Missed") +
+  theme_minimal()
+
+ggsave(paste(root_folder, "plots/ai_missed_marketing_str.png", sep=""), width = 10, height = 6)
 
 
 

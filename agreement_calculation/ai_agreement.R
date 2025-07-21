@@ -427,8 +427,8 @@ compare_multilabel_kappa <- function(df1, df2, column_name, label1 = "model1", l
 }
 
 # network model for agreement (check the AI polling paper)
-all_offers_text <- c("0" = "None", "1" = "App downloads", "2" = "Contests", "3" = "Pay 2 take 3", "4" = "20% extra",
-                     "5" = "Limited edition", "6" = "Social charity", "7" = "Gifts", "8" = "Price discount", "9" = "Loyalty programs")
+all_offers_text <- c("0" = "None", "1" = "Apps", "2" = "Contests", "3" = "Pay 2 take 3", "4" = "20% extra",
+                     "5" = "Limited ed.", "6" = "Charity", "7" = "Gifts", "8" = "Discount", "9" = "Loyalty")
 
 ############## PREMIUM OFFERS
 kappa_pixtral_vs_gpt <- compare_multilabel_kappa(pixtral, gpt, "prem_offer", "pixtral", "gpt")

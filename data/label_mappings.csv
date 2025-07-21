@@ -1,0 +1,65 @@
+category,code,text_label
+new_type_ad,1,Manufacuturer (P)
+new_type_ad,2,Non-food (P)
+new_type_ad,3,Manufacturer
+new_type_ad,4,Retailer (P)
+new_type_ad,5,Retailer
+new_type_ad,6,Restaurant (P)
+new_type_ad,7,Restaurant
+new_type_ad,8,Non-food
+new_type_ad,9,Alcohol
+new_type_ad,10,Infant Formula
+target_group,1,Child
+target_group,2,Adolescent
+target_group,3,Adult
+prem_offer,0,None
+prem_offer,1,Apps
+prem_offer,2,Contests
+prem_offer,3,Pay 2 take 3
+prem_offer,4,20% extra
+prem_offer,5,Limited ed.
+prem_offer,6,Charity
+prem_offer,7,Gifts
+prem_offer,8,Discount
+prem_offer,9,Loyalty
+prem_offer,10,Other
+marketing_str,0,None
+marketing_str,1,Owned Char.
+marketing_str,2,Licensed Char.
+marketing_str,3,Other Char.
+marketing_str,4,Movie Char.
+marketing_str,5,Famous sports
+marketing_str,6,Amateur Sports
+marketing_str,7,Celebrities
+marketing_str,8,Awards
+marketing_str,9,Events
+marketing_str,10,Sport events
+marketing_str,11,Other
+who_cat_clean,1,Choc./Sugar
+who_cat_clean,2,Pastries
+who_cat_clean,3,Snacks
+who_cat_clean,4a,Juices
+who_cat_clean,4b,Dairy
+who_cat_clean,4c,Plant drinks
+who_cat_clean,4d,Energy Drinks
+who_cat_clean,4e,Soft Drinks
+who_cat_clean,4f,Water/Tea/Cof
+who_cat_clean,5,Ices
+who_cat_clean,6,Cereals
+who_cat_clean,7,Yogurt
+who_cat_clean,8,Cheese
+who_cat_clean,9,Ready-made
+who_cat_clean,10,Fats
+who_cat_clean,11,Bread
+who_cat_clean,12,Pasta/Rice
+who_cat_clean,13,Fresh Meat
+who_cat_clean,14,Proc. Meat
+who_cat_clean,17,Plant Meat
+who_cat_clean,15,Fresh Fruit
+who_cat_clean,16,Proc. Fruit
+who_cat_clean,18,Sauces
+who_cat_clean,A,Alcohol
+who_cat_clean,NA,Non-Appl.
+alcohol,1,Yes
+alcohol,0,No
+alcohol,-1,Not Sure
