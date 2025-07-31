@@ -207,10 +207,16 @@ ggplot(plot_df_confint, aes(x = coder, y = value, color = model)) +
   geom_point(position = position_dodge(width = 0.5)) +
   geom_errorbar(aes(ymin = ci_low, ymax = ci_upp),
                 width = 0.2, position = position_dodge(width = 0.5)) +
-  facet_grid(metric ~ question) +
+  facet_grid(question ~ metric) +
   labs(y = "Agreement", x = "AI Model", color = "Rater",
        title = "Confidence Intervals of AI vs. Human Agreement") +
-  theme_minimal()
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.spacing.y = unit(1, "lines"),  # adds space between rows
+    strip.background = element_rect(fill = "gray90", color = NA),
+    strip.text = element_text(face = "bold", size = 12)
+  ) 
 
 ggsave(paste(root_folder, "plots/human_ai_single_confint.png", sep=""), width = 9, height = 5)
 
@@ -348,6 +354,43 @@ comparison_df %>%
   # save to excel
   #write_xlsx(paste(root_folder, "plots/agreement_single_all.xlsx", sep=""))
   DT::datatable(options = list(scrollX = TRUE))
+
+
+multi_confint <- read_excel(paste(root_folder, "plots/agreement_multiple_all.xlsx", sep=""))
+
+# plot with the confidence intervals
+plot_df_confint <- multi_confint %>%
+  filter(!(rater1 %in% c("gpt", "qwen", "gemma", "pixtral")),
+         rater2 %in% c("gpt", "qwen", "gemma", "pixtral")) %>%
+  mutate(kripp_masi_ci_low = as.numeric(sub("\\(([^,]+),.*", "\\1", kripp_alpha_masi_ci)),
+         kripp_masi_ci_upp = as.numeric(sub(".*,(.+)\\)", "\\1", kripp_alpha_masi_ci))) %>%
+  pivot_longer(cols = c(jaccard, kripp_alpha_masi),
+               names_to = "metric", values_to = "value") %>%
+  mutate(
+    ci_low = ifelse(metric == "jaccard", value, kripp_masi_ci_low),
+    ci_upp = ifelse(metric == "jaccard", value, kripp_masi_ci_upp),
+    metric = recode(metric, jaccard = "Jaccard Similarity", kripp_alpha_masi = "Krippendorff's Alpha MASI")
+  )
+
+ggplot(plot_df_confint, aes(x = rater1, y = value, color = rater2)) +
+  geom_point(position = position_dodge(width = 0.5)) +
+  geom_errorbar(aes(ymin = ci_low, ymax = ci_upp),
+                width = 0.2, position = position_dodge(width = 0.5)) +
+  facet_grid(question ~ metric) +
+  labs(y = "Agreement", x = "AI Model", color = "Rater",
+       title = "Confidence Intervals of AI vs. Human Agreement") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.spacing.y = unit(1, "lines"),  # adds space between rows
+    strip.background = element_rect(fill = "gray90", color = NA),
+    strip.text = element_text(face = "bold", size = 12)
+  ) 
+
+ggsave(paste(root_folder, "plots/human_ai_multiple_confint.png", sep=""), width = 9, height = 5)
+
+
+
 
 
 
@@ -732,47 +775,57 @@ category_agreement_multiple <- lapply(multi_label_vars, function(col) {
   df
 }) %>% bind_rows()
 
+custom_colors <- c(
+  "gpt_consensus" = "#00BFFF",
+  "qwen_consensus" = "#1C86EE",
+  "gpt_qwen" = "#EEC900"
+)
 
 # single choice
 category_agreement_single %>%
+  mutate(model_pair = factor(model_pair, levels = c("gpt_consensus", "qwen_consensus", "gpt_qwen")),
+         category_n = paste0(category, " (", n, ")")) %>%
   #filter(model_pair != "gpt_qwen") %>%
-  filter(question == "target_group") %>%
+  filter(question == "new_type_ad") %>%
   ggplot(aes(x = category, y = gwet_coeff, fill = model_pair)) +
-    geom_bar(stat = "identity", position = "dodge") +
+    geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
     geom_text(aes(label = round(gwet_coeff, 2)), 
               position = position_dodge(width = 0.9), vjust = 3.5, size = 2.5) +
     geom_errorbar(aes(ymin = gwet_ci_low, ymax = gwet_ci_upp),
                   width = 0.2, position = position_dodge(width = 0.9)) +
+    scale_fill_manual(values = custom_colors) +
     #facet_wrap(~ question, scales = "free_x") +
     theme_minimal(base_size = 12) +
     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
     labs(
-      title = "Model Agreement by Brand Category - Target Group",
+      title = "Model Agreement by Brand Category - Ad Type",
       y = "Gwet's AC Agreement",
       x = "Brand Category"
     )
 
-ggsave(paste(root_folder, "plots/brand_gwet_target_group_single.png", sep=""), width = 10, height = 6)
+ggsave(paste(root_folder, "plots/brand_gwet_type_ad_single.png", sep=""), width = 10, height = 6)
 
 
 # multi-label
-overall_alphas <- res_ml %>%
-  filter(question == "prem_offer", rater1 != "gpt") %>%
+overall_alphas <- multi_confint %>%
+  filter(question == "marketing_str", rater1 == "Consensus") %>%
   select(rater2, kripp_alpha_masi)
 alpha_gpt <- overall_alphas %>% filter(rater2 == "gpt") %>% pull(kripp_alpha_masi)
 alpha_qwen <- overall_alphas %>% filter(rater2 == "qwen") %>% pull(kripp_alpha_masi)
 
 
 category_agreement_multiple %>%
-  mutate(category_n = paste0(category, " (", n, ")")) %>%
+  mutate(model_pair = factor(model_pair, levels = c("gpt_consensus", "qwen_consensus", "gpt_qwen")),
+         category_n = paste0(category, " (", n, ")")) %>%
   #filter(model_pair != "gpt_qwen") %>%
-  filter(question == "prem_offer") %>%
+  filter(question == "marketing_str") %>%
   ggplot(aes(x = category_n, y = alpha_masi, fill = model_pair)) +
     geom_bar(stat = "identity", position = "dodge") +
     geom_text(aes(label = round(alpha_masi, 2)), 
               position = position_dodge(width = 0.9), vjust = -0.5, size = 2.5) +
     geom_errorbar(aes(ymin = alpha_ci_low, ymax = alpha_ci_upp),
                   width = 0.2, position = position_dodge(width = 0.9)) +
+    scale_fill_manual(values = custom_colors) +
     annotate("text", x = Inf, y = Inf,
              label = paste0("GPT vs Consensus α = ", round(alpha_gpt, 2)),
              hjust = 1, vjust = 26, size = 4, fontface = "italic") +
@@ -784,13 +837,13 @@ category_agreement_multiple %>%
     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
     #ylim(-0.6, 1) +
     labs(
-      title = "Model Agreement by Brand Category - Premium Offers",
+      title = "Model Agreement by Brand Category - Marketing Strategies",
       y = "Krippendorff's Alpha (MASI)",
       x = "Brand Category"
     ) 
   
 
-ggsave(paste(root_folder, "plots/brand_alpha_prem_offer.png", sep=""), width = 10, height = 6)
+ggsave(paste(root_folder, "plots/brand_alpha_marketing_str.png", sep=""), width = 10, height = 6)
 
 # find some categories to analyze more in detail, for ex. online ordering and sweet 
 # biscuits have really low agreement for who_cat
