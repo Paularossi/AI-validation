@@ -9,6 +9,7 @@ library(psych) # for kappa confidence interval
 
 root_folder <- "C:/Users/P70090005/Desktop/phd/AI-validation/gpu outputs/"
 responses_human_all <- read_excel(paste(root_folder, "responses_human_final.xlsx", sep=""))
+responses_dieticians <- read_excel(paste(root_folder, "dieticians_all_final.xlsx", sep=""))
 
 gemma <- read_excel(paste(root_folder, "gemma_all_1000.xlsx", sep=""))
 gpt <- read_excel(paste(root_folder, "gpt_all_1000.xlsx", sep=""))
@@ -28,10 +29,20 @@ qwen <- read_excel(paste(root_folder, "qwen_all_1000.xlsx", sep=""))
 #   right_join(responses_human_all, by = "img_id")
 # write_xlsx(responses_human_all, paste(root_folder, "responses_human_final.xlsx", sep=""))
 
-gemma <- gemma %>% filter(img_id %in% responses_human_all$img_id)
-gpt <- gpt %>% filter(img_id %in% responses_human_all$img_id)
-pixtral <- pixtral %>% filter(img_id %in% responses_human_all$img_id)
-qwen <- qwen %>% filter(img_id %in% responses_human_all$img_id)
+# change to only use the 400 from dieticians
+responses_dieticians <- responses_dieticians %>% 
+  filter(img_id %in% responses_human_all$img_id) %>% arrange(img_id)
+responses_human_all <- responses_human_all %>% 
+  filter(img_id %in% responses_dieticians$img_id) %>% arrange(img_id)
+
+gemma <- gemma %>% 
+  filter(img_id %in% responses_human_all$img_id) %>% arrange(img_id)
+gpt <- gpt %>% 
+  filter(img_id %in% responses_human_all$img_id) %>% arrange(img_id)
+pixtral <- pixtral %>%
+  filter(img_id %in% responses_human_all$img_id) %>% arrange(img_id)
+qwen <- qwen %>% 
+  filter(img_id %in% responses_human_all$img_id) %>% arrange(img_id)
 
 models <- list(gemma = gemma, pixtral = pixtral, gpt = gpt, qwen = qwen)
 
@@ -63,7 +74,7 @@ label_df <- read.csv("C:/Users/P70090005/Desktop/phd/AI-validation/data/label_ma
                      stringsAsFactors = FALSE, na = c(""))
 
 # function to merge data for a given column of ai models and human consensus
-merge_ai_human_column <- function(models, humans, column) {
+merge_ai_human_column <- function(models, humans, column, dieticians = NULL) {
   model_names <- names(models)
   
   # extract relevant model columns
@@ -78,26 +89,41 @@ merge_ai_human_column <- function(models, humans, column) {
   human_cons <- humans %>%
     select(img_id, consensus = !!sym(consensus_col), category)
   
-  merged <- full_join(model_preds, human_cons, by = "img_id")
-  
+  if (!is.null(dieticians)) {
+    diet_cols <- grep( 
+      paste0("^", human_mapping[[column]], "_(diet[1-3]|dietcons)$"), 
+      names(dieticians), value = TRUE 
+    ) 
+    diet_preds <- dieticians %>%
+      select(c(img_id, diet_cols)) %>%
+      rename(diet1 = paste(human_mapping[[column]], "_diet1", sep=""),
+             diet2 = paste(human_mapping[[column]], "_diet2", sep=""),
+             diet3 = paste(human_mapping[[column]], "_diet3", sep=""),
+             dietcons = paste(human_mapping[[column]], "_dietcons", sep=""))
+    merged <- full_join(full_join(model_preds, human_cons, by = "img_id"),diet_preds, by="img_id")
+  }
+  else merged <- full_join(model_preds, human_cons, by = "img_id")
   return(merged)
 }
 
 
 # ====== SINGLE-CHOICE COLUMNS ======
 
-compare_human_ai_kappa <- function(humans, models, ai_mapping, human_mapping) {
-  # fix image IDs in human data
-  humans$Image_ID <- gsub("\\.png$", "", humans$Image_ID)
-  
+compare_human_ai_kappa <- function(humans, models, dieticians = NULL) {
+
   results <- list()
+  
+  if (!is.null(dieticians)) {
+    # merge with the rest of the human classifications
+    humans <- inner_join(humans, dieticians, by = "img_id")
+  }
   
   for (question in single_choice_vars) {
     ai_column <- ai_mapping[[question]]
     human_base <- human_mapping[[question]] 
     # grab coder1/2/3 + consensus col names 
     human_cols <- grep( 
-      paste0("^", human_base, "_(coder[1-3]|cons)$"), 
+      paste0("^", human_base, "_(coder[1-3]|diet[1-3]|cons|dietcons)$"), 
       names(humans), value = TRUE 
     ) 
     if (length(human_cols) < 1) next 
@@ -109,9 +135,9 @@ compare_human_ai_kappa <- function(humans, models, ai_mapping, human_mapping) {
         if (!(ai_column %in% names(model_df)) || !(hc %in% names(humans))) next
         
         merged <- merge(
-          humans[, c("Image_ID", hc)],
+          humans[, c("img_id", hc)],
           model_df[, c("img_id", ai_column)],
-          by.x = "Image_ID", by.y = "img_id"
+          by = "img_id"
         ) 
         
         merged <- merged[!is.na(merged[[hc]]) & !is.na(merged[[ai_column]]), ]
@@ -145,7 +171,9 @@ compare_human_ai_kappa <- function(humans, models, ai_mapping, human_mapping) {
   return(do.call(rbind, results))
 }
 
-results_kappa <- compare_human_ai_kappa(responses_human_all, models, ai_mapping, human_mapping)
+# with the dieticians
+results_kappa <- compare_human_ai_kappa(responses_human_all, models, responses_dieticians)
+#results_kappa <- compare_human_ai_kappa(responses_human_all, models, ai_mapping, human_mapping)
 head(results_kappa)
 
 # unnest the conf int for gwet
@@ -155,13 +183,11 @@ results_kappa <- results_kappa %>%
 
 # pivot to long format for plotting
 plot_df <- results_kappa %>%
-  mutate(rater = sub("^.+_(coder[1-3]|cons)$", "\\1", coder),
+  mutate(rater = sub("^.+_(coder[1-3]|diet[1-3]|cons|dietcons)$", "\\1", coder),
          rater = recode(rater,
-                        coder1 = "Coder 1",
-                        coder2 = "Coder 2",
-                        coder3 = "Coder 3",
-                        cons   = "Consensus"
-         )) %>%
+                        coder1 = "Coder 1", coder2 = "Coder 2", coder3 = "Coder 3",
+                        diet1 = "Dietician 1", diet2 = "Dietician 2", diet3 = "Dietician 3",
+                        cons   = "Consensus", dietcons = "Consensus (D)")) %>%
   pivot_longer(
     cols = c(prop_agreement, kappa, gwet_coeff),
     names_to = "metric",
@@ -190,7 +216,7 @@ ggplot(plot_df, aes(x = model, y = rater, fill = value)) +
     panel.spacing = unit(0.5, "lines")
   )
 
-ggsave(paste(root_folder, "plots/human_ai_single.png", sep=""), width = 9, height = 5)
+ggsave(paste(root_folder, "plots/human_diet_ai_single.png", sep=""), width = 9, height = 5)
 
 # plot with the confidence intervals
 plot_df_confint <- results_kappa %>%
@@ -200,7 +226,7 @@ plot_df_confint <- results_kappa %>%
     ci_low = ifelse(metric == "kappa", kappa_conf_low, gwet_ci_low),
     ci_upp = ifelse(metric == "kappa", kappa_conf_upp, gwet_ci_upp),
     metric = recode(metric, kappa = "Cohen's Kappa", gwet_coeff = "Gwet’s AC1"),
-    coder = sub("^.+_(coder[1-3]|cons)$", "\\1", coder)
+    coder = sub("^.+_(coder[1-3]|cons|diet[1-3]|dietcons)$", "\\1", coder)
   )
 
 ggplot(plot_df_confint, aes(x = coder, y = value, color = model)) +
@@ -218,26 +244,30 @@ ggplot(plot_df_confint, aes(x = coder, y = value, color = model)) +
     strip.text = element_text(face = "bold", size = 12)
   ) 
 
-ggsave(paste(root_folder, "plots/human_ai_single_confint.png", sep=""), width = 9, height = 5)
+ggsave(paste(root_folder, "plots/human_diet_ai_single_confint.png", sep=""), width = 9, height = 5)
 
 # COMPARE EVERYTHING TOGETHER
-compare_all_raters <- function(humans, models, single_choice_vars) {
-  humans$Image_ID <- gsub("\\.png$", "", humans$Image_ID)
+compare_all_raters <- function(humans, models, dieticians = NULL) {
   
   results <- list()
+  
+  if (!is.null(dieticians)) {
+    # merge with the rest of the human classifications
+    humans <- inner_join(humans, dieticians, by = "img_id")
+  } 
   
   for (question in single_choice_vars) {
     ai_column <- ai_mapping[[question]]
     human_base <- human_mapping[[question]]
     
-    # get all human raters (e.g., coder1/2/3/cons)
-    human_cols <- grep(paste0("^", human_base, "_(coder[1-3]|cons)$"), names(humans), value = TRUE)
+    # get all human raters (e.g., coder123/cons/diet123)
+    human_cols <- grep(paste0("^", human_base, "_(coder[1-3]|diet[1-3]|cons|dietcons)$"), names(humans), value = TRUE)
     if (length(human_cols) < 1) next
     
-    # Build full rater list
+    # build full rater list
     rater_list <- list()
     for (hc in human_cols) {
-      df <- humans[, c("Image_ID", hc)]
+      df <- humans[, c("img_id", hc)]
       names(df) <- c("img_id", "label")
       rater_list[[hc]] <- df
     }
@@ -280,28 +310,24 @@ compare_all_raters <- function(humans, models, single_choice_vars) {
   return(bind_rows(results))
 }
 
-comparison_df <- compare_all_raters(responses_human_all, models, single_choice_vars)
+comparison_df <- compare_all_raters(responses_human_all, models, responses_dieticians)
 
 plot_df <- comparison_df %>%
   pivot_longer(cols = c(kappa, prop_agreement, gwet_coeff), names_to = "metric", values_to = "value") %>%
   mutate(
-    rater1 = sub(".*_(coder[1-3]|cons)$", "\\1", rater1),
-    rater2 = sub(".*_(coder[1-3]|cons)$", "\\1", rater2),
+    rater1 = sub(".*_(coder[1-3]|diet[1-3]|cons|dietcons)$", "\\1", rater1),
+    rater2 = sub(".*_(coder[1-3]|diet[1-3]|cons|dietcons)$", "\\1", rater2),
     rater1 = recode(rater1,
-                    coder1 = "Coder 1",
-                    coder2 = "Coder 2",
-                    coder3 = "Coder 3",
-                    cons   = "Consensus",
-                    .default = rater1),
+                    coder1 = "Coder 1", coder2 = "Coder 2", coder3 = "Coder 3",
+                    diet1 = "Dietician 1", diet2 = "Dietician 2", diet3 = "Dietician 3",
+                    cons   = "Consensus", dietcons = "Consensus (D)", .default = rater1),
     rater2 = recode(rater2,
-                    coder1 = "Coder 1",
-                    coder2 = "Coder 2",
-                    coder3 = "Coder 3",
-                    cons   = "Consensus",
-                    .default = rater2),
+                    coder1 = "Coder 1", coder2 = "Coder 2", coder3 = "Coder 3",
+                    diet1 = "Dietician 1", diet2 = "Dietician 2", diet3 = "Dietician 3",
+                    cons   = "Consensus", dietcons = "Consensus (D)", .default = rater2),
     metric = recode(metric, kappa = "Cohen's Kappa", prop_agreement = "% Agreement",
                     gwet_coeff = "Gwet's AC1")
-  )
+  ) 
 
 plot_df_symmetric <- plot_df %>%
   bind_rows(
@@ -311,83 +337,81 @@ plot_df_symmetric <- plot_df %>%
   distinct(question, metric, rater1, rater2, .keep_all = TRUE)
 
 
-ggplot(plot_df_symmetric, aes(x = rater1, y = rater2, fill = value)) +
-  geom_tile(color = "white") +
-  geom_text(aes(label = round(value, 2)), size = 3) +
-  facet_grid(metric ~ question, scales = "free", space = "free") +
-  scale_fill_gradient2(
-    low = "red", mid = "yellow", high = "darkgreen",
-    midpoint = 0.5, limits = c(0, 1), name = "Agreement"
-  ) +
-  labs(
-    title = "Agreement Across All Raters (Single-Choice)",
-    x = "Rater 1", y = "Rater 2"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    strip.text.y = element_text(angle = -90),
-    panel.spacing = unit(0.5, "lines")
-  )
+plot_df_symmetric %>% 
+  filter(question == "alcohol") %>%
+  ggplot(aes(x = rater1, y = rater2, fill = value)) +
+    geom_tile(color = "white") +
+    geom_text(aes(label = round(value, 2)), size = 2.5) +
+    facet_grid(. ~ metric, scales = "free", space = "free") +
+    scale_fill_gradient2(
+      low = "red", mid = "yellow", high = "darkgreen",
+      midpoint = 0.5, limits = c(0, 1), name = "Agreement"
+    ) +
+    labs(
+      title = "Agreement Across All Raters (Single-Choice)",
+      x = "Rater 1", y = "Rater 2"
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      strip.text.y = element_text(angle = -90),
+      panel.spacing = unit(0.5, "lines")
+    )
 
-ggsave(paste(root_folder, "plots/everything_single.png", sep=""), width = 10, height = 5)
+ggsave(paste(root_folder, "plots/everything_diet_single.png", sep=""), width = 10, height = 5)
 
 comparison_df %>%
   mutate(
     across(where(is.numeric), ~round(.x, 2)),
-    rater1 = sub(".*_(coder[1-3]|cons)$", "\\1", rater1),
-    rater2 = sub(".*_(coder[1-3]|cons)$", "\\1", rater2),
+    rater1 = sub(".*_(coder[1-3]|diet[1-3]|cons|dietcons)$", "\\1", rater1),
+    rater2 = sub(".*_(coder[1-3]|diet[1-3]|cons|dietcons)$", "\\1", rater2),
     rater1 = recode(rater1,
-                    coder1 = "Coder 1",
-                    coder2 = "Coder 2",
-                    coder3 = "Coder 3",
-                    cons   = "Consensus",
-                    .default = rater1),
+                    coder1 = "Coder 1", coder2 = "Coder 2", coder3 = "Coder 3",
+                    diet1 = "Dietician 1", diet2 = "Dietician 2", diet3 = "Dietician 3",
+                    cons   = "Consensus", dietcons = "Consensus (D)", .default = rater1),
     rater2 = recode(rater2,
-                    coder1 = "Coder 1",
-                    coder2 = "Coder 2",
-                    coder3 = "Coder 3",
-                    cons   = "Consensus",
-                    .default = rater2),
+                    coder1 = "Coder 1", coder2 = "Coder 2", coder3 = "Coder 3",
+                    diet1 = "Dietician 1", diet2 = "Dietician 2", diet3 = "Dietician 3",
+                    cons   = "Consensus", dietcons = "Consensus (D)", .default = rater2),
     kappa_conf = paste0("(", kappa_conf_low, ",", kappa_conf_upp, ")", sep="")) %>%
   select(-c("kappa_conf_low", "kappa_conf_upp")) %>%
   # save to excel
-  #write_xlsx(paste(root_folder, "plots/agreement_single_all.xlsx", sep=""))
+  #write_xlsx(paste(root_folder, "plots/agreement_single_all_400.xlsx", sep=""))
   DT::datatable(options = list(scrollX = TRUE))
 
 
-multi_confint <- read_excel(paste(root_folder, "plots/agreement_multiple_all.xlsx", sep=""))
-
-# plot with the confidence intervals
-plot_df_confint <- multi_confint %>%
-  filter(!(rater1 %in% c("gpt", "qwen", "gemma", "pixtral")),
-         rater2 %in% c("gpt", "qwen", "gemma", "pixtral")) %>%
-  mutate(kripp_masi_ci_low = as.numeric(sub("\\(([^,]+),.*", "\\1", kripp_alpha_masi_ci)),
-         kripp_masi_ci_upp = as.numeric(sub(".*,(.+)\\)", "\\1", kripp_alpha_masi_ci))) %>%
-  pivot_longer(cols = c(jaccard, kripp_alpha_masi),
-               names_to = "metric", values_to = "value") %>%
-  mutate(
-    ci_low = ifelse(metric == "jaccard", value, kripp_masi_ci_low),
-    ci_upp = ifelse(metric == "jaccard", value, kripp_masi_ci_upp),
-    metric = recode(metric, jaccard = "Jaccard Similarity", kripp_alpha_masi = "Krippendorff's Alpha MASI")
-  )
-
-ggplot(plot_df_confint, aes(x = rater1, y = value, color = rater2)) +
-  geom_point(position = position_dodge(width = 0.5)) +
-  geom_errorbar(aes(ymin = ci_low, ymax = ci_upp),
-                width = 0.2, position = position_dodge(width = 0.5)) +
-  facet_grid(question ~ metric) +
-  labs(y = "Agreement", x = "AI Model", color = "Rater",
-       title = "Confidence Intervals of AI vs. Human Agreement") +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    panel.spacing.y = unit(1, "lines"),  # adds space between rows
-    strip.background = element_rect(fill = "gray90", color = NA),
-    strip.text = element_text(face = "bold", size = 12)
-  ) 
-
-ggsave(paste(root_folder, "plots/human_ai_multiple_confint.png", sep=""), width = 9, height = 5)
+# multi_confint <- read_excel(paste(root_folder, "plots/agreement_multiple_all.xlsx", sep=""))
+# 
+# # plot with the confidence intervals
+# plot_df_confint <- multi_confint %>%
+#   filter(!(rater1 %in% c("gpt", "qwen", "gemma", "pixtral")),
+#          rater2 %in% c("gpt", "qwen", "gemma", "pixtral")) %>%
+#   mutate(kripp_masi_ci_low = as.numeric(sub("\\(([^,]+),.*", "\\1", kripp_alpha_masi_ci)),
+#          kripp_masi_ci_upp = as.numeric(sub(".*,(.+)\\)", "\\1", kripp_alpha_masi_ci))) %>%
+#   pivot_longer(cols = c(jaccard, kripp_alpha_masi),
+#                names_to = "metric", values_to = "value") %>%
+#   mutate(
+#     ci_low = ifelse(metric == "jaccard", value, kripp_masi_ci_low),
+#     ci_upp = ifelse(metric == "jaccard", value, kripp_masi_ci_upp),
+#     metric = recode(metric, jaccard = "Jaccard Similarity", kripp_alpha_masi = "Krippendorff's Alpha MASI")
+#   )
+# 
+# ggplot(plot_df_confint, aes(x = rater1, y = value, color = rater2)) +
+#   geom_point(position = position_dodge(width = 0.5)) +
+#   geom_errorbar(aes(ymin = ci_low, ymax = ci_upp),
+#                 width = 0.2, position = position_dodge(width = 0.5)) +
+#   facet_grid(question ~ metric) +
+#   labs(y = "Agreement", x = "AI Model", color = "Rater",
+#        title = "Confidence Intervals of AI vs. Human Agreement") +
+#   theme_minimal() +
+#   theme(
+#     axis.text.x = element_text(angle = 45, hjust = 1),
+#     panel.spacing.y = unit(1, "lines"),  # adds space between rows
+#     strip.background = element_rect(fill = "gray90", color = NA),
+#     strip.text = element_text(face = "bold", size = 12)
+#   ) 
+# 
+# ggsave(paste(root_folder, "plots/human_ai_multiple_confint.png", sep=""), width = 9, height = 5)
 
 
 
@@ -483,21 +507,24 @@ compute_kripp_alpha_binary <- function(human, ai, labels) {
 
 # EVERYTHING TOGETHER
 # if consesnsus = TRUE, compute agreement ONLY with the human consensus column
-compare_multilabel_human_ai <- function(humans, models, multi_label_vars, consensus = TRUE) { 
+compare_multilabel_human_ai <- function(humans, models, consensus = TRUE, dieticians = NULL) { 
   out <- list(); idx <- 1 
-  # normalize image ID
-  humans <- humans %>% mutate(Image_ID = gsub("\\.png$", "", Image_ID))
+  
+  if (!is.null(dieticians)) {
+    # merge with the rest of the human classifications
+    humans <- inner_join(humans, dieticians, by = "img_id")
+  }
   
   for (question in multi_label_vars) { 
     ai_col <- ai_mapping[[question]] 
     human_base <- human_mapping[[question]] 
     
     if (consensus) {
-      human_cols <- paste0(human_base, "_cons")
+      human_cols <- paste0(human_base, "_(cons|dietcons)$")
     } else {
       # grab coder1/2/3 + consensus col names 
       human_cols <- grep( 
-        paste0("^", human_base, "_(coder[1-3]|cons)$"), 
+        paste0("^", human_base, "_(coder[1-3]|diet[1-3]|cons|dietcons)$"), 
         names(humans), value = TRUE 
       ) 
     }
@@ -507,7 +534,7 @@ compare_multilabel_human_ai <- function(humans, models, multi_label_vars, consen
     # build full rater list
     rater_list <- list()
     for (hc in human_cols) {
-      df <- humans[, c("Image_ID", hc)]
+      df <- humans[, c("img_id", hc)]
       names(df) <- c("img_id", "label")
       rater_list[[hc]] <- df
     }
@@ -573,28 +600,24 @@ compare_multilabel_human_ai <- function(humans, models, multi_label_vars, consen
   bind_rows(out) 
 }
 
-res_ml <- compare_multilabel_human_ai(humans=responses_human_all, models, 
-                                      multi_label_vars, consensus = FALSE)
+res_ml <- compare_multilabel_human_ai(responses_human_all, models, 
+                                      consensus = FALSE, responses_dieticians)
 
 plot_df_ml <- res_ml %>%
   select(-kripp_alpha_unweighted) %>%
   pivot_longer(cols = c(jaccard, kripp_alpha_binary, kripp_alpha_masi), 
                names_to = "metric", values_to = "value") %>%
   mutate(
-    rater1 = sub(".*_(coder[1-3]|cons)$", "\\1", rater1),
-    rater2 = sub(".*_(coder[1-3]|cons)$", "\\1", rater2),
+    rater1 = sub(".*_(coder[1-3]|diet[1-3]|cons|dietcons)$", "\\1", rater1),
+    rater2 = sub(".*_(coder[1-3]|diet[1-3]|cons|dietcons)$", "\\1", rater2),
     rater1 = recode(rater1,
-                    coder1 = "Coder 1",
-                    coder2 = "Coder 2",
-                    coder3 = "Coder 3",
-                    cons   = "Consensus",
-                    .default = rater1),
+                    coder1 = "Coder 1", coder2 = "Coder 2", coder3 = "Coder 3",
+                    diet1 = "Dietician 1", diet2 = "Dietician 2", diet3 = "Dietician 3",
+                    cons   = "Consensus", dietcons = "Consensus (D)", .default = rater1),
     rater2 = recode(rater2,
-                    coder1 = "Coder 1",
-                    coder2 = "Coder 2",
-                    coder3 = "Coder 3",
-                    cons   = "Consensus",
-                    .default = rater2),
+                    coder1 = "Coder 1", coder2 = "Coder 2", coder3 = "Coder 3",
+                    diet1 = "Dietician 1", diet2 = "Dietician 2", diet3 = "Dietician 3",
+                    cons   = "Consensus", dietcons = "Consensus (D)", .default = rater2),
     metric = recode(metric, jaccard = "Jaccard Similarity",
                     kripp_alpha_binary = "Krippendorff’s α (Binary)",
                     kripp_alpha_masi = "Krippendorff’s α (MASI)")
@@ -609,7 +632,7 @@ plot_df_sym <- plot_df_ml %>%
 
 ggplot(plot_df_sym, aes(x = rater1, y = rater2, fill = value)) +
   geom_tile(color = "white") +
-  geom_text(aes(label = round(value, 2)), size = 2.9) +
+  geom_text(aes(label = round(value, 2)), size = 2.5) +
   facet_grid(metric ~ question, scales = "free", space = "free_x") +
   scale_fill_gradient2(
     low = "red", mid = "yellow", high = "darkgreen",
@@ -627,25 +650,21 @@ ggplot(plot_df_sym, aes(x = rater1, y = rater2, fill = value)) +
   )
 
 
-ggsave(paste(root_folder, "plots/everything_multiple.png", sep=""), width = 10, height = 6)
+ggsave(paste(root_folder, "plots/everything_diet_multiple.png", sep=""), width = 10, height = 6)
 
 res_ml %>%
   mutate(
     across(where(is.numeric), ~round(.x, 2)),
-    rater1 = sub(".*_(coder[1-3]|cons)$", "\\1", rater1),
-    rater2 = sub(".*_(coder[1-3]|cons)$", "\\1", rater2),
+    rater1 = sub(".*_(coder[1-3]|diet[1-3]|cons|dietcons)$", "\\1", rater1),
+    rater2 = sub(".*_(coder[1-3]|diet[1-3]|cons|dietcons)$", "\\1", rater2),
     rater1 = recode(rater1,
-                    coder1 = "Coder 1",
-                    coder2 = "Coder 2",
-                    coder3 = "Coder 3",
-                    cons   = "Consensus",
-                    .default = rater1),
+                    coder1 = "Coder 1", coder2 = "Coder 2", coder3 = "Coder 3",
+                    diet1 = "Dietician 1", diet2 = "Dietician 2", diet3 = "Dietician 3",
+                    cons   = "Consensus", dietcons = "Consensus (D)", .default = rater1),
     rater2 = recode(rater2,
-                    coder1 = "Coder 1",
-                    coder2 = "Coder 2",
-                    coder3 = "Coder 3",
-                    cons   = "Consensus",
-                    .default = rater2)) %>%
+                    coder1 = "Coder 1", coder2 = "Coder 2", coder3 = "Coder 3",
+                    diet1 = "Dietician 1", diet2 = "Dietician 2", diet3 = "Dietician 3",
+                    cons   = "Consensus", dietcons = "Consensus (D)", .default = rater2)) %>%
   # save to excel
   #write_xlsx(paste(root_folder, "plots/agreement_multiple_all.xlsx", sep=""))
   DT::datatable(options = list(scrollX = TRUE))
@@ -672,7 +691,7 @@ res_ml %>%
 table(responses_human_all$category)
 
 # how consistent are AI models in different product categories?
-agreement_by_category_all <- function(models, column, humans = NULL, multiple = FALSE) {
+agreement_by_category_all <- function(models, column, humans = NULL, dieticians = NULL, multiple = FALSE) {
   raters <- list()
   
   # add all AI models
@@ -693,6 +712,19 @@ agreement_by_category_all <- function(models, column, humans = NULL, multiple = 
       colnames(df) <- c("img_id", "category", "label")
       df$model <- "consensus"
       raters[["consensus"]] <- df
+    }
+  }
+  
+  # optionally add dieticians consensus
+  if (!is.null(dieticians)) {
+    diet_col <- human_mapping[[column]]
+    consensus_col <- paste0(diet_col, "_dietcons")
+    
+    if (consensus_col %in% names(dieticians)) {
+      df <- dieticians[, c("img_id", "category", consensus_col)]
+      colnames(df) <- c("img_id", "category", "label")
+      df$model <- "diet_consensus"
+      raters[["diet_consensus"]] <- df
     }
   }
 
@@ -762,8 +794,8 @@ agreement_by_category_all <- function(models, column, humans = NULL, multiple = 
 
 
 category_agreement_single <- lapply(single_choice_vars, function(col) {
-  df <- agreement_by_category_all(models = list(gpt = gpt, qwen = qwen), 
-                                  column = col, humans = responses_human_all)
+  df <- agreement_by_category_all(list(gpt = gpt, qwen = qwen), column=single_choice_vars[1], 
+                                  responses_human_all, responses_dieticians)
   df$question <- col
   df
 }) %>% bind_rows()
@@ -777,13 +809,14 @@ category_agreement_multiple <- lapply(multi_label_vars, function(col) {
 
 custom_colors <- c(
   "gpt_consensus" = "#00BFFF",
-  "qwen_consensus" = "#1C86EE",
+  "gpt_diet_consensus" = "#1C86EE",
+  #"qwen_consensus" = "#1C86EE",
   "gpt_qwen" = "#EEC900"
 )
 
 # single choice
 category_agreement_single %>%
-  mutate(model_pair = factor(model_pair, levels = c("gpt_consensus", "qwen_consensus", "gpt_qwen")),
+  mutate(model_pair = factor(model_pair, levels = c("gpt_consensus", "gpt_diet_consensus", "gpt_qwen")),
          category_n = paste0(category, " (", n, ")")) %>%
   #filter(model_pair != "gpt_qwen") %>%
   filter(question == "new_type_ad") %>%
