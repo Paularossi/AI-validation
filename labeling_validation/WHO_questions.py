@@ -24,6 +24,30 @@ instructions_1 = (
     "For example: *CHOCOLATE_SUGAR*: Yes – explanation; *CHOCOLATE_SUGAR_PROCESSING*: ULTRA_PROCESSED – explanation."
 )
 
+instructions_out = (
+    "You will be provided with a picture of potential outdoor advertising in Belgium. "
+    "You will be given sets of questions about various aspects of the advertisement along with definitions and examples. "
+    "Please answer each question using the exact format: *QUESTION_LABEL*: Yes/No - Brief explanation. Do not include any extra text, greetings, or commentary. "
+    "For example, your answers should look like: *CARTOON*: Yes/No - explanation; *CELEBRITY*: Yes/No - explanation; and so on. Ensure that the question label is between a set of stars. "
+    "Ensure that each answer includes a brief explanation of the features in the image that led to your choice. Ensure that you answer all questions. "
+    "You will also be provided with a set of definitions which you should refer to when answering: "
+    "1. Food/drink manufacturing company or brand – a company or brand involved in producing and processing foods or beverages. Manufacturers focus on creating and packaging of consumable goods rather than selling directly to consumers. This category excludes restaurant/takeaway/delivery companies or brands and food retailers. "
+    "2. Food/drink retailer – a company or brand that sells food and drink products directly to consumers for home consumption (e.g., supermarkets, grocery stores, convenience stores and specialty food shops). These retailers primarily serve as intermediaries, providing a variety of products from different manufacturers to the end consumer. This category excludes manufacturing companies and restaurant/takeaway/delivery companies or brands. "
+    "3. Restaurant/takeaway/delivery outlet – a food service establishment that prepares and sells ready-to-eat meals and beverages for immediate consumption (either on the premises, through takeaway, or via delivery). These outlets focus on providing prepared food directly to customers for immediate or near-immediate consumption and do not primarily sell food or drink items in raw or packaged form for home cooking. This category excludes food retailers and manufacturing companies or brands. "
+    "4. Unprocessed or minimally processed food – natural foods (excluding Alcohol) that have undergone minimal changes (such as cleaning, drying, or freezing) without significant alteration to their nutritional content, e.g., fresh meat, eggs, frozen fruit. "
+    "5. Processed food – foods (excluding Alcohol) that have undergone processes like canning, smoking, fermentation or preservation, often with added ingredients to extend shelf life or enhance flavour, e.g., canned tomatoes, cheese, bread, smoked meat, dry fish. "
+    "6. Ultra-processed food – formulations of industrial ingredients (excluding Alcohol), resulting from a series of industrial processes such as frying, chemical modifications or application of additives, containinh little or no whole foods, e.g., chips, candy, instant noodles, soft drinks, fast-food. "
+    "7. Processed culinary ingredients – substances (excluding Alcohol) extracted or refined from minimally processed foods, typically used in cooking or seasoning other food, e.g., sugar, butter, oils, spices. "
+    "List all distinct food items/dishes (not ingredients) observable in the image based on the overall presentation. "
+    "Important: When the image features a composite food item (e.g., a burger, sandwich, or pizza), select only the single food category that best represents the whole item rather than listing separate categories for its individual ingredients (such as bread, meat, or sauces). "
+    "For each [of the 23] food category, answer in the following format: *QUESTION_LABEL*: Yes/No - Brief explanation. If you answer 'Yes' for a category, immediately provide a follow-up line indicating the level of processing for that food item in the format: *<CATEGORY_LABEL>_PROCESSING*: <Processing Level> - Brief explanation. Do not include any additional commentary. "
+    "For example: *CHOCOLATE_SUGAR*: Yes – explanation; *CHOCOLATE_SUGAR_PROCESSING*: ULTRA_PROCESSED – explanation."
+)
+
+brand = [
+    ("BRAND", "Do you see any brand in the image? If yes, list all the brands separated by commas. If not, write 'No brand'. ")
+]
+
 # the questions need: (1) to be mutually exclusive, (2) to have a definition and (3) to give examples
 
 type_ad = [ # make it clear that this question is about the company running the ad
@@ -122,7 +146,8 @@ speculation = [
 # which one do we care about? the owner of the ad or the brand in the ad?
 
 instructions_new = (
-    "You will be provided with a picture of an online advertisement delivered to Belgium/Netherlands, its corresponding text (which may be in English, French, or Dutch), and the name of the company running the ad. "
+    #"You will be provided with a picture of an online advertisement delivered to Belgium/Netherlands, its corresponding text (which may be in English, French, or Dutch), and the name of the company running the ad. "
+    "You will be provided with a picture of potential outdoor advertising in Belgium. "
     "You will be given sets of questions about various aspects of the advertisement along with definitions and examples. "
     "Provide answers in the following format: *QUESTION_LABEL*: Yes/No - Brief explanation. Do not include any extra text, greetings, or commentary. "
     "For example, your answers should look like: *CARTOON*: Yes/No - explanation; *CELEBRITY*: Yes/No - explanation; and so on. Ensure that the question label is between a set of stars. "
@@ -181,7 +206,7 @@ instructions_new = (
     "*FOOD_COMPANY_NO_PRODUCT*: No – Not shown ..."
 )
 
-def create_user_content():
+def create_user_content(outdoor):
     user_content = []
 
     # add each category question block as a grouped selection
@@ -212,10 +237,15 @@ def create_user_content():
     #processing_text = "### Processing Level Classification: For each selected WHO food category, classify the level of processing. If a category is marked 'No', do not answer.\n"
     #processing_text += "\n".join([f"*{q[0]}_PROCESSING*: What is the level of processing for this item?" for q in who_cat])
     #user_content.append({"type": "text", "text": processing_text})
-    
+
     speculation_text = "### Speculation Level: Rate from 0-10.\n"
     speculation_text += "\n".join([f"*{q[0]}*: {q[1]}" for q in speculation])
     user_content.append({"type": "text", "text": speculation_text})
+
+    if outdoor:
+        brand_text = "### Brand: presence of brands in the image.\n"
+        brand_text += "\n".join([f"*{q[0]}*: {q[1]}" for q in brand])
+        user_content.append({"type": "text", "text": brand_text})
     
     return user_content
 
@@ -592,12 +622,17 @@ def get_processing_level_new(answer_dict, who_cat_text, who_cat):
 
 
 # in case some questions were not answered
-def process_missing_output(response, expected_labels):
+def process_missing_output(response, expected_labels, outdoor = False):
     if isinstance(response, list):
         response = response[0]
 
     extracted = {label.strip(): {"answer": answer, "explanation": explanation.strip() if explanation else ""}
         for label, answer, explanation in PATTERN_AYA.findall(response)}
+    
+    if outdoor:
+        # add brand 
+        brand = response.split("*BRAND*:")[-1].strip() if "*BRAND*:" in response else ""
+        extracted["BRAND"] = {"answer": brand, "explanation": ""}
 
     full_output = {}
     for label in expected_labels:
@@ -617,7 +652,7 @@ def process_missing_output(response, expected_labels):
 
 
 # should technically work for all models, if their output has been processed properly
-def get_final_dict_entry(answer_dict, ad_id):
+def get_final_dict_entry(answer_dict, ad_id, outdoor = False):
 
     ad_type, ad_type_explanation = get_ad_type(answer_dict)
     marketing_str, marketing_str_explanation = get_marketing_strategy(answer_dict)
@@ -644,6 +679,9 @@ def get_final_dict_entry(answer_dict, ad_id):
         "speculation_expl": answer_dict["SPECULATION_LEVEL"][1]
     }
 
+    if outdoor: # add the brand
+        dict_entry["brand"] = answer_dict.get("BRAND", ["MISSING", ""])[0]
+
     # update with the processed dictionary
     try:
         processed_dict, processed_explanation_dict = get_processing_level_new(answer_dict, who_cat_text, who_cat) # unlike the rest, this is a dict
@@ -655,3 +693,13 @@ def get_final_dict_entry(answer_dict, ad_id):
     print(dict_entry) 
 
     return dict_entry
+
+
+def get_instructions_api(model_id, outdoor):
+    if model_id == "gpt-4o":
+        if outdoor:
+            return instructions_out
+        else:
+            return instructions_1
+    else:
+        return instructions_new

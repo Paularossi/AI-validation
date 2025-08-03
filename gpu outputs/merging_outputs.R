@@ -84,6 +84,30 @@ setdiff(qwen_all$img_id, pixtral_all$img_id)
 setdiff(pixtral_all$img_id, qwen_all$img_id)
 
 
+# outdoor ads
+root_folder <- "C:/Users/P70090005/Desktop/phd/AI-validation/data/outdoor ads/"
+
+gpt1 <- read_excel(paste(root_folder, "ais/gpt_20250802_194421.xlsx", sep=""))
+gpt2 <- read_excel(paste(root_folder, "ais/gpt_20250802_200341.xlsx", sep=""))
+gpt3 <- read_excel(paste(root_folder, "ais/gpt_20250802_204553.xlsx", sep=""))
+
+gpt_all <- bind_rows(gpt1, gpt2, gpt3)
+sum(duplicated(gpt_all$img_id)) # check for duplicates
+
+write_xlsx(gpt_all, paste(root_folder, "gpt_all.xlsx", sep=""))
+sum(gpt_all$response_time)/60
+
+
+pixtral1 <- read_excel(paste(root_folder, "ais/pixtral_20250803_133526.xlsx", sep=""))
+pixtral2 <- read_excel(paste(root_folder, "ais/", sep=""))
+pixtral3 <- read_excel(paste(root_folder, "ais/", sep=""))
+
+pixtral_all <- bind_rows(pixtral1, pixtral2, pixtral3)
+sum(duplicated(pixtral_all$img_id)) # check for duplicates
+
+write_xlsx(pixtral_all, paste(root_folder, "pixtral_all.xlsx", sep=""))
+sum(pixtral_all$response_time)/60
+
 # =============================================================================
 # for ad distribution
 root_folder <- "C:/Users/P70090005/Documents/AI-validation/data/"
@@ -234,7 +258,12 @@ write_xlsx(pixtral, paste(root_folder, "pixtral_all_1000.xlsx", sep=""))
 write_xlsx(gpt, paste(root_folder, "gpt_all_1000.xlsx", sep=""))
 write_xlsx(qwen, paste(root_folder, "qwen_all_1000.xlsx", sep=""))
 
+# outdoor
+gpt_all <- alcohol_changes(gpt_all)
+pixtral_all <- alcohol_changes(pixtral_all)
 
+write_xlsx(pixtral_all, paste(root_folder, "pixtral_all_outdoor.xlsx", sep=""))
+write_xlsx(gpt_all, paste(root_folder, "gpt_all_outdoor.xlsx", sep=""))
 
 # =============================================================================
 ### ===== PROCESSING THE SURVEY DATA =====
@@ -444,8 +473,8 @@ write_xlsx(responses_long_indexed, paste(root_folder, "clean results all/respons
 # now pivot wider for all variables
 responses_wide_all <- responses_long_indexed %>%
   pivot_wider(
-    id_cols = Image_ID,
-    names_from = coder_number,
+    id_cols = ad_id,
+    names_from = diet_number,
     values_from = c(ad_type, new_type_ad, target_group, alcohol, non_alcohol, prem_offer, marketing_str, who_cat, who_cat_clean)
   )
 
