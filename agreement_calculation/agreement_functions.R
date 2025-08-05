@@ -27,7 +27,7 @@ human_mapping <- list(
 
 
 # function to merge data for a given column of ai models and human consensus
-merge_ai_human_column <- function(models, humans, column, dieticians = NULL) {
+merge_ai_human_column <- function(models, humans = NULL, column, dieticians = NULL) {
   model_names <- names(models)
   
   # extract relevant model columns
@@ -37,10 +37,12 @@ merge_ai_human_column <- function(models, humans, column, dieticians = NULL) {
     df %>% select(img_id, !!sym(col)) %>% rename(!!model := !!sym(col))
   }) %>% reduce(full_join, by = "img_id")
   
-  # add human consensus
-  consensus_col <- paste0(human_mapping[[column]], "_cons")
-  human_cons <- humans %>%
-    select(img_id, consensus = !!sym(consensus_col), category)
+  if (!is.null(humans)) {
+    # add human consensus
+    consensus_col <- paste0(human_mapping[[column]], "_cons")
+    human_cons <- humans %>%
+      select(img_id, consensus = !!sym(consensus_col), category)
+  }
   
   if (!is.null(dieticians)) {
     diet_cols <- grep( 
@@ -53,9 +55,18 @@ merge_ai_human_column <- function(models, humans, column, dieticians = NULL) {
              diet2 = paste(human_mapping[[column]], "_diet2", sep=""),
              diet3 = paste(human_mapping[[column]], "_diet3", sep=""),
              dietcons = paste(human_mapping[[column]], "_dietcons", sep=""))
-    merged <- full_join(full_join(model_preds, human_cons, by = "img_id"),diet_preds, by="img_id")
   }
-  else merged <- full_join(model_preds, human_cons, by = "img_id")
+  
+  if (!is.null(humans) & !is.null(dieticians))
+    merged <- ull_join(full_join(model_preds, human_cons, by = "img_id"), diet_preds, by="img_id")
+  else if (is.null(humans))
+    merged <- full_join(model_preds, diet_preds, by="img_id")
+  else if (is.null(dieticians))
+    merged <- full_join(model_preds, human_cons, by = "img_id")
+  else {
+    print("Warning: both humans and dieticians missing.")
+    merged <- model_preds
+  }
   return(merged)
 }
 
@@ -492,56 +503,55 @@ find_disagreeing_ads <- function(models, column, humans) {
   return(disagreed)
 }
 
-# by label for single columns 
-# TODO: add dieticians
-single_disagreement_by_label <- function(models, humans, column) {
+# by label for single columns
+single_disagreement_by_label <- function(models, humans = NULL, column, dieticians = NULL) {
   
-  merged <- merge_ai_human_column(models, humans, column) %>%
-    filter(!is.na(consensus))  # remove rows with no consensus
+  merged <- merge_ai_human_column(models, humans, column, dieticians)
+    #filter(!is.na(consensus))  # remove rows with no consensus
   
-  merged %>% filter(gemma == "8")
-  
+  label_col <- if (!is.null(humans)) "consensus" else "dietcons"
   # count for each consensus label
   results <- merged %>%
     rowwise() %>%
     mutate(
-      n_match = sum(c_across(all_of(names(models))) == consensus, na.rm = TRUE),
+      label = .data[[label_col]],
+      n_match = sum(c_across(all_of(names(models))) == label, na.rm = TRUE),
       all_failed = n_match == 0,
-      across(all_of(names(models)), ~ .x != consensus, .names = "failed_{.col}")
+      across(all_of(names(models)), ~ .x != label, .names = "failed_{.col}")
     ) %>%
     ungroup() %>%
-    group_by(consensus) %>%
+    group_by(label) %>%
     summarise(
       total = n(),
-      n_all_failed = sum(all_failed),
-      pct_all_failed = mean(all_failed),
+      failed_all_n = sum(all_failed),
+      failed_all_pct = mean(all_failed),
       across(starts_with("failed_"), list(
         n = ~sum(.x, na.rm = TRUE),
         pct = ~mean(.x, na.rm = TRUE)
       )),
       .groups = "drop"
     ) %>%
-    arrange(desc(pct_all_failed))
+    arrange(desc(failed_all_pct))
   
   return(results)
 }
 
-
 # by label for multi-label
-multi_disagreement_by_label <- function(models, humans, column) {
+multi_disagreement_by_label <- function(models, humans = NULL, column, dieticians = NULL) {
   
-  merged <- merge_ai_human_column(models, humans, column) %>%
-    filter(!is.na(consensus))  # filter empty rows
+  merged <- merge_ai_human_column(models, humans, column, dieticians)
+    #filter(!is.na(consensus))  # filter empty rows
   
   # get unique labels from consensus
-  all_labels <- unique(unlist(strsplit(merged$consensus, ",\\s*")))
+  label_col <- if (!is.null(humans)) "consensus" else "dietcons"
+  all_labels <- unique(unlist(strsplit(merged[[label_col]], ",\\s*")))
   all_labels <- all_labels[all_labels != ""]
   
   results <- list()
   
   for (label in all_labels) {
     rows_with_label <- merged %>%
-      filter(grepl(paste0("(^|,\\s*)", label, "(\\s*,|$)"), consensus))
+      filter(grepl(paste0("(^|,\\s*)", label, "(\\s*,|$)"),  if (!is.null(humans)) consensus else dietcons))
     
     n_total <- nrow(rows_with_label)
     
@@ -561,27 +571,27 @@ multi_disagreement_by_label <- function(models, humans, column) {
     
     summary_counts <- n_failed_all %>%
       summarise(
-        n_all_failed = sum(all_failed),
+        all_failed = sum(all_failed),
         across(starts_with("failed_"), sum)
       )
     
     results[[label]] <- data.frame(
       label = label,
-      n = n_total,
-      n_all_failed = summary_counts$n_all_failed,
-      pct_all_failed = summary_counts$n_all_failed / n_total,
+      total = n_total,
+      failed_all_n = summary_counts$all_failed,
+      failed_all_pct = summary_counts$all_failed / n_total,
       # add per-model missed counts and percentages
       do.call(cbind, lapply(names(models), function(m) {
         n_failed <- summary_counts[[paste0("failed_", m)]]
         setNames(
           data.frame(n_failed, n_failed / n_total),
-          c(paste0("n_", m, "_failed"), paste0("pct_", m, "_failed"))
+          c(paste0("failed_", m, "_n"), paste0("failed_", m, "_pct"))
         )
       }))
     )
   }
   
-  bind_rows(results) %>% arrange(desc(pct_all_failed))
+  bind_rows(results) %>% arrange(desc(failed_all_pct))
 }
 
 

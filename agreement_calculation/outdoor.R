@@ -165,8 +165,7 @@ ggsave(paste(root_folder, "plots/everything_multiple.png", sep=""), width = 10, 
 # ===== ANALYSIS BY LABELS =====
 # by label for single columns 
 disagreed_by_label_single <- lapply(single_choice_vars, function(col) {
-  df <- single_disagreement_by_label(models = models, 
-                                     humans = responses_human_all, column = col)
+  df <- single_disagreement_by_label(models = models, column = col, dieticians = responses_dieticians)
   df$question <- col
   df
 }) %>% bind_rows()
@@ -175,32 +174,40 @@ disagreed_by_label_single <- lapply(single_choice_vars, function(col) {
 # 2. which model misses more?
 
 plot_df <- disagreed_by_label_single %>%
-  left_join(label_df, by = join_by(consensus == code, question == category)) %>%
-  filter(question == "target_group") %>%
-  select(consensus, failed_gpt_pct, failed_qwen_pct, failed_pixtral_pct, failed_gemma_pct, text_label, total) %>%
-  pivot_longer(-c("consensus", "text_label", "total"), names_to = "model", values_to = "pct_failed") %>%
-  mutate(model = recode(model,
-                        failed_gpt_pct = "GPT",
-                        failed_qwen_pct = "Qwen",
-                        failed_pixtral_pct = "Pixtral",
-                        failed_gemma_pct = "Gemma"))
+  left_join(label_df, by = join_by(label == code, question == category)) %>%
+  filter(question == "new_type_ad") %>%
+  select(total, text_label, starts_with("failed_")) %>%
+  pivot_longer(
+    cols = starts_with("failed_"),
+    names_to = c("model", ".value"),
+    names_pattern = "failed_(.*)_(n|pct)"
+  ) %>%
+  mutate(
+    model = recode(model,
+                   gpt = "GPT",
+                   qwen = "Qwen",
+                   pixtral = "Pixtral",
+                   gemma = "Gemma",
+                   all = "All Models")
+  ) %>%
+  mutate(text_label_n = paste0(text_label, " (", total, ")")) %>% 
+  filter(model %!in% c("all_n", "all_pct"))
 
-ggplot(plot_df, aes(x = model, y = reorder(text_label, -pct_failed), fill = pct_failed)) +
+ggplot(plot_df, aes(x = model, y = reorder(text_label_n, -pct), fill = pct)) +
   geom_tile(color = "white") +
-  geom_text(aes(label = paste(round(pct_failed, 2), " (", total, ")", sep="")), size = 4) +
+  geom_text(aes(label = paste(round(pct, 2), " (", n, ")", sep="")), size = 4) +
   scale_fill_gradient2(
     low = "darkgreen", mid = "yellow", high = "red", midpoint = 0.5, limits = c(0, 1))+
-  labs(title = "Missed Consensus Labels by Model and Label (Target Group)",
+  labs(title = "Missed Consensus Labels by Model and Label (Ad Type)",
        x = "Model", y = "Label Code", fill = "% Missed") +
   theme_minimal()
 
-ggsave(paste(root_folder, "plots/ai_missed_target_group.png", sep=""), width = 10, height = 6)
+ggsave(paste(root_folder, "plots/outdoor/ai_missed_ad_type.png", sep=""), width = 10, height = 6)
 
 
 # by label for multi-label
 disagreed_by_label_multiple <- lapply(multi_label_vars, function(col) {
-  df <- multi_disagreement_by_label(models = models, 
-                                    humans = responses_human_all, column = col)
+  df <- multi_disagreement_by_label(models = models, column = col, dieticians = responses_dieticians)
   df$question <- col
   df
 }) %>% bind_rows()
@@ -208,25 +215,35 @@ disagreed_by_label_multiple <- lapply(multi_label_vars, function(col) {
 
 plot_df <- disagreed_by_label_multiple %>%
   left_join(label_df, by = join_by(label == code, question == category)) %>%
-  filter(question == "marketing_str") %>%
-  select(label, pct_gpt_failed, pct_qwen_failed, pct_pixtral_failed, pct_gemma_failed, text_label, n) %>%
-  pivot_longer(-c("label", "text_label", "n"), names_to = "model", values_to = "pct_failed") %>%
-  mutate(model = recode(model,
-                        pct_gpt_failed = "GPT",
-                        pct_qwen_failed = "Qwen",
-                        pct_pixtral_failed = "Pixtral",
-                        pct_gemma_failed = "Gemma"))
+  filter(question == "who_cat_clean") %>%
+  select(total, text_label, starts_with("failed_")) %>%
+  pivot_longer(
+    cols = starts_with("failed_"),
+    names_to = c("model", ".value"),
+    names_pattern = "failed_(.*)_(n|pct)"
+  ) %>%
+  mutate(
+    model = recode(model,
+                   gpt = "GPT",
+                   qwen = "Qwen",
+                   pixtral = "Pixtral",
+                   gemma = "Gemma",
+                   all = "All Models"),
+    text_label_n = paste0(text_label, " (", total, ")")
+  )
 
-ggplot(plot_df, aes(x = model, y = reorder(text_label, -pct_failed), fill = pct_failed)) +
+
+ggplot(plot_df, aes(x = model, y = reorder(text_label_n, -pct), fill = pct)) +
   geom_tile(color = "white") +
-  geom_text(aes(label = paste(round(pct_failed, 2), " (", n, ")", sep="")), size = 4) +
+  geom_text(aes(label = paste(round(pct, 2), " (", n, ")", sep="")), size = 4) +
   scale_fill_gradient2(
     low = "darkgreen", mid = "yellow", high = "red", midpoint = 0.5, limits = c(0, 1))+
-  labs(title = "Missed Consensus Labels by Model and Label (Marketing Strategies)",
+  labs(title = "Missed Consensus Labels by Model and Label (WHO Categories)",
        x = "Model", y = "Label Code", fill = "% Missed") +
   theme_minimal()
 
-ggsave(paste(root_folder, "plots/ai_missed_marketing_str.png", sep=""), width = 10, height = 6)
+
+ggsave(paste(root_folder, "plots/outdoor/ai_missed_who_cat.png", sep=""), width = 10, height = 6)
 
 
 
