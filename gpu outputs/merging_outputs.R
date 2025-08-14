@@ -4,7 +4,7 @@ library(dplyr)
 library(writexl)
 library(purrr)
 
-root_folder <- "C:/Users/P70090005/Documents/AI-validation/gpu outputs/"
+root_folder <- "C:/Users/P70090005/Desktop/phd/AI-validation/gpu outputs/"
 
 ###### START ANALYSIS HERE
 #original_labeling <- read_excel(paste(root_folder, "validation results/original_coding.xlsx", sep=""))
@@ -214,11 +214,11 @@ write.csv(nl, paste(root2, "images_nl.csv", sep=""), row.names = FALSE)
 
 # =============================================================================
 ### ===== HELPER FUNCTIONS FOR ADJUSTING THE LABELS =====
-root_folder <- "C:/Users/P70090005/Documents/AI-validation/gpu outputs/"
+root_folder <- "C:/Users/P70090005/Desktop/phd/AI-validation/gpu outputs/"
 gemma <- read_excel(paste(root_folder, "gemma_all_1000.xlsx", sep=""))
 pixtral <- read_excel(paste(root_folder, "pixtral_all_1000.xlsx", sep=""))
 gpt <- read_excel(paste(root_folder, "gpt_all_1000.xlsx", sep=""))
-qwen <- read_excel(paste(root_folder, "qwen_all.xlsx", sep=""))
+qwen <- read_excel(paste(root_folder, "qwen_all_1000.xlsx", sep=""))
 
 
 # create new ad_types and who_cats based on whether there is alcohol
@@ -483,6 +483,8 @@ write_xlsx(responses_wide_all, paste(root_folder, "clean results all/responses_a
 names(responses_wide_all)
 
 # build the consensus columns for single choice questions
+responses_wide_all <- read_excel(paste(root_folder, "responses_human_final.xlsx", sep=""))
+
 responses_human_clean <- responses_wide_all %>%
   select(Image_ID)
 
@@ -565,7 +567,76 @@ write_xlsx(responses_human_all, paste(root_folder, "clean results all/responses_
 
 # ================ DATA PROCESSING ENDS HERE ========================
 
+multi_label_consensus_majority <- function(..., return_string = TRUE, threshold = 2, brand = TRUE) {
+  labels <- list(...)
+    
+  sets <- lapply(labels, function(x) {
+    # if (is.null(x) || is.na(x) || trimws(x) == "-" || trimws(x) == "") {
+    #   return(character(0))
+    # }
+    trimws(strsplit(as.character(x), ",")[[1]])
+  })
+  
+  sets <- sets[lengths(sets) > 0]
+  if (length(sets) == 0) return(if (return_string) "-" else character(0))
+  
+  # flatten all labels into one vector
+  all_labels <- unlist(sets, use.names = FALSE)
+  if (length(all_labels) == 0) return(if (return_string) "-" else character(0))
+  
+  # count frequency across coders
+  label_counts <- table(all_labels)
+  consensus <- names(label_counts[label_counts >= threshold])
+  
+  if (length(consensus) == 0) {
+    union_set <- Reduce(union, sets)
+    return(if (return_string) paste(sort(union_set), collapse = ",") else union_set)
+  }
+  #if (length(consensus) == 0) return(if (brand) "-" else names(label_counts)[which.max(label_counts)])
+  
+  consensus <- sort(consensus)
+  if (return_string) {
+    paste(consensus, collapse = ", ")
+  } else {
+    consensus
+  }
+}
 
+responses_multi_clean <- responses_wide_all %>%
+  select(Image_ID)
+
+# the new multi-label consensus still doesn't work.... 
+for (var in multi_label_vars) {
+  
+  coder_cols <- paste0(var, "_coder", 1:3)
+  responses_multi_clean[coder_cols] <- responses_wide_all[coder_cols]
+  
+  consensus_col <- paste0(var, "_cons")
+  
+  # responses_multi_clean[[consensus_col]] <- responses_wide_all %>%
+  #   mutate(consensus_col = pmap_chr(
+  #     list(coder_cols[1], coder_cols[2], coder_cols[3]),
+  #     ~ multi_label_consensus_majority(..1, ..2, ..3, threshold = 2)
+  #     )
+  #   ) %>% select(consensus_col)
+  
+  responses_multi_clean[[consensus_col]] <-
+    pmap_chr(.l = responses_wide_all[coder_cols],
+             ~ multi_label_consensus_majority(..1, ..2, ..3, threshold = 2))
+  
+  #responses_multi_clean[[consensus_col]] <- pmap_chr(responses_wide_all[coder_cols], multi_label_consensus_majority)
+  #responses_multi_clean$cons_temp <- pmap_chr(responses_wide_all[coder_cols], multi_label_consensus)
+}
+
+responses_human_all <- left_join(responses_human_clean, responses_multi_clean, by = "Image_ID")
+
+responses_human_all <- responses_wide_all %>% 
+  select(Image_ID, img_id, category, language) %>% 
+  left_join(responses_human_all, by = "Image_ID") %>%
+  select(-Image_ID)
+
+
+write_xlsx(responses_human_all, paste(root_folder, "responses_human_final_new.xlsx", sep=""))
 
 
 

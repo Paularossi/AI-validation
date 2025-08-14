@@ -3,6 +3,7 @@ library(irr)
 library(tidyverse)
 library(irrCAC) # to calculate Gwet's AC1/AC2 agreement coefficient
 library(psych) # for kappa confidence interval
+library(stringi)   # for accent/diacritic removal
 
 single_choice_vars <- c("new_type_ad", "target_group", "alcohol")
 multi_label_vars <- c("who_cat_clean", "prem_offer", "marketing_str")
@@ -25,6 +26,11 @@ human_mapping <- list(
   "marketing_str" = "marketing_str"
 )
 
+# labels for all questions
+label_df <- read.csv("C:/Users/P70090005/Desktop/phd/AI-validation/data/label_mappings.csv", 
+                     stringsAsFactors = FALSE, na = c(""))
+
+`%!in%` = Negate(`%in%`) # define new `not in` function
 
 # function to merge data for a given column of ai models and human consensus
 merge_ai_human_column <- function(models, humans = NULL, column, dieticians = NULL) {
@@ -33,7 +39,7 @@ merge_ai_human_column <- function(models, humans = NULL, column, dieticians = NU
   # extract relevant model columns
   model_preds <- lapply(model_names, function(model) {
     df <- models[[model]]
-    col <- ai_mapping[[column]]
+    col <- ifelse(column != "brand", ai_mapping[[column]], column)
     df %>% select(img_id, !!sym(col)) %>% rename(!!model := !!sym(col))
   }) %>% reduce(full_join, by = "img_id")
   
@@ -45,16 +51,17 @@ merge_ai_human_column <- function(models, humans = NULL, column, dieticians = NU
   }
   
   if (!is.null(dieticians)) {
+    col <- ifelse(column != "brand", human_mapping[[column]], column)
     diet_cols <- grep( 
-      paste0("^", human_mapping[[column]], "_(diet[1-3]|dietcons)$"), 
+      paste0("^", col, "_(diet[1-3]|dietcons)$"), 
       names(dieticians), value = TRUE 
     ) 
     diet_preds <- dieticians %>%
-      select(c(img_id, diet_cols)) %>%
-      rename(diet1 = paste(human_mapping[[column]], "_diet1", sep=""),
-             diet2 = paste(human_mapping[[column]], "_diet2", sep=""),
-             diet3 = paste(human_mapping[[column]], "_diet3", sep=""),
-             dietcons = paste(human_mapping[[column]], "_dietcons", sep=""))
+      select(c(img_id, all_of(diet_cols))) %>%
+      rename(diet1 = paste(col, "_diet1", sep=""),
+             diet2 = paste(col, "_diet2", sep=""),
+             diet3 = paste(col, "_diet3", sep=""),
+             dietcons = paste(col, "_dietcons", sep=""))
   }
   
   if (!is.null(humans) & !is.null(dieticians))
@@ -270,10 +277,14 @@ MASI_simmilarity_matrix <- function(df, sep = ", ") {
 
 # Krippendorff's alpha using binary decomposition
 compute_kripp_alpha_binary <- function(human, ai, labels) {
+  human_norm <- gsub("\\s*,\\s*", ",", tolower(human))
+  ai_norm    <- gsub("\\s*,\\s*", ",", tolower(ai))
+  
   # build 2 × N matrix: rows = raters, cols = items
   out <- sapply(labels, function(lbl) {
-    h_bin <- grepl(paste0("(^|,)", lbl, "(,|$)"), human)
-    a_bin <- grepl(paste0("(^|,)", lbl, "(,|$)"), ai)
+    lbl_esc <- paste0("\\Q", tolower(lbl), "\\E")  # escape all metacharacters
+    h_bin <- grepl(paste0("(^|,)", lbl_esc, "(,|$)"), human_norm, perl = TRUE)
+    a_bin <- grepl(paste0("(^|,)", lbl_esc, "(,|$)"), ai_norm, perl = TRUE)
     
     mat <- rbind(h_bin, a_bin)
     # remove items with all NAs or constant values
@@ -288,7 +299,7 @@ compute_kripp_alpha_binary <- function(human, ai, labels) {
 
 # EVERYTHING TOGETHER
 # if consesnsus = TRUE, compute agreement ONLY with the human consensus column
-compare_multilabel_human_ai <- function(humans, models, consensus = TRUE, dieticians = NULL) { 
+compare_multilabel_human_ai <- function(humans, models, consensus = TRUE, dieticians = NULL, multi_label_vars = multi_label_vars) { 
   out <- list(); idx <- 1 
   
   if (!is.null(dieticians)) {
@@ -297,8 +308,8 @@ compare_multilabel_human_ai <- function(humans, models, consensus = TRUE, dietic
   }
   
   for (question in multi_label_vars) { 
-    ai_col <- ai_mapping[[question]] 
-    human_base <- human_mapping[[question]] 
+    ai_col <- ifelse(question != "brand", ai_mapping[[question]], question)
+    human_base <- ifelse(question != "brand", human_mapping[[question]], question)
     
     if (consensus) {
       human_cols <- paste0(human_base, "_(cons|dietcons)$")
@@ -595,7 +606,31 @@ multi_disagreement_by_label <- function(models, humans = NULL, column, dietician
 }
 
 
-
+# normalize a single brand field into a vector of canonical brand tokens
+clean_brand <- function(x) {
+  if (is.null(x) || length(x) == 0) return(NA_character_)
+  
+  if (trimws(x) %in% c("-", "No brand", "No brands", "No brand.", "No brands.")) 
+    return("-") # keep "-" exactly as is (meaning 'no brand')
+   
+  x <- tolower(x)
+  x <- str_remove_all(x, "\\(.*?\\)")                  # drop parenthetical descriptors (e.g., (bière), (fast food))
+  x <- stri_trans_general(x, "Latin-ASCII")            # remove accents: é -> e
+  x <- str_replace_all(x, " ", "") # remove whitespaces
+  x <- str_replace_all(x, "[\"']", "")                 # <<< remove single & double quotes
+  x <- str_replace_all(x, "&", " and ")                # optional normalization
+  x <- str_replace_all(x, "[;|]", ",")                 # unify separators
+  x <- str_replace_all(x, "\\s+", " ")                 # squeeze spaces
+  
+  brands <- str_split(x, ",", simplify = FALSE)[[1]]
+  brands <- trimws(brands)
+  brands <- brands[brands != ""]
+  
+  brands <- unique(brands)
+  
+  # return as a single comma-separated string
+  paste(brands, collapse = ", ")
+}
 
 
 

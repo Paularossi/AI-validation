@@ -3,11 +3,10 @@ library(writexl)
 library(ggplot2)
 
 source("C:/Users/P70090005/Desktop/phd/AI-validation/agreement_calculation/agreement_functions.R")
-`%!in%` = Negate(`%in%`)
 
 root_folder <- "C:/Users/P70090005/Desktop/phd/AI-validation/gpu outputs/"
-responses_human_all <- read_excel(paste(root_folder, "responses_human_final.xlsx", sep=""))
-responses_dieticians <- read_excel(paste(root_folder, "dieticians_all_final.xlsx", sep=""))
+responses_human_all <- read_excel(paste(root_folder, "responses_human_final_new.xlsx", sep=""))
+responses_dieticians <- read_excel(paste(root_folder, "dieticians_all_final2.xlsx", sep=""))
 
 gemma <- read_excel(paste(root_folder, "gemma_all_1000.xlsx", sep=""))
 gpt <- read_excel(paste(root_folder, "gpt_all_1000.xlsx", sep=""))
@@ -27,12 +26,7 @@ qwen <- read_excel(paste(root_folder, "qwen_all_1000.xlsx", sep=""))
 #   right_join(responses_human_all, by = "img_id")
 # write_xlsx(responses_human_all, paste(root_folder, "responses_human_final.xlsx", sep=""))
 
-# change to only use the 400 from dieticians
-responses_dieticians <- responses_dieticians %>% 
-  filter(img_id %in% responses_human_all$img_id) %>% arrange(img_id)
-responses_human_all <- responses_human_all %>% 
-  filter(img_id %in% responses_dieticians$img_id) %>% arrange(img_id)
-
+# change to only use the images from humans
 gemma <- gemma %>% 
   filter(img_id %in% responses_human_all$img_id) %>% arrange(img_id)
 gpt <- gpt %>% 
@@ -238,7 +232,8 @@ comparison_df %>%
 
 # ====== MULTI-LABEL COLUMNS ======
 res_ml <- compare_multilabel_human_ai(responses_human_all, models, 
-                                      consensus = FALSE, responses_dieticians)
+                                      consensus = FALSE, responses_dieticians,
+                                      multi_label_vars)
 
 plot_df_ml <- res_ml %>%
   select(-kripp_alpha_unweighted) %>%
@@ -303,23 +298,8 @@ res_ml %>%
                     diet1 = "Dietician 1", diet2 = "Dietician 2", diet3 = "Dietician 3",
                     cons   = "Consensus", dietcons = "Consensus (D)", .default = rater2)) %>%
   # save to excel
-  #write_xlsx(paste(root_folder, "plots/agreement_multiple_all.xlsx", sep=""))
+  #write_xlsx(paste(root_folder, "plots/agreement_multiple_all_400.xlsx", sep=""))
   DT::datatable(options = list(scrollX = TRUE))
-  
-  # to save the table as an image:
-  # gt() %>%
-  # fmt_number(
-  #   columns = where(is.numeric),
-  #   decimals = 2
-  # ) %>%
-  # data_color(
-  #   columns = where(is.numeric),
-  #   colors = scales::col_numeric(
-  #     palette = c("red", "yellow", "green"),
-  #     domain = c(0, 1)
-  #   )
-  # ) %>%
-  # gtsave(paste(root_folder, "plots/res_ml_table.png", sep=""))
 
 
 
@@ -376,6 +356,8 @@ ggsave(paste(root_folder, "plots/brand_gwet_type_ad_single.png", sep=""), width 
 
 
 # multi-label
+multi_confint <- read_excel(paste(root_folder, "plots/agreement_multiple_all.xlsx", sep=""))
+
 overall_alphas <- multi_confint %>%
   filter(question == "marketing_str", rater1 == "Consensus") %>%
   select(rater2, kripp_alpha_masi)
@@ -512,7 +494,7 @@ disagreed_by_label_multiple <- lapply(multi_label_vars, function(col) {
 
 plot_df <- disagreed_by_label_multiple %>%
   left_join(label_df, by = join_by(label == code, question == category)) %>%
-  filter(question == "marketing_str") %>%
+  filter(question == "who_cat_clean") %>%
   select(total, text_label, starts_with("failed_")) %>%
   pivot_longer(
     cols = starts_with("failed_"),
@@ -534,11 +516,151 @@ ggplot(plot_df, aes(x = model, y = reorder(text_label_n, -pct), fill = pct)) +
   geom_text(aes(label = paste(round(pct, 2), " (", n, ")", sep="")), size = 4) +
   scale_fill_gradient2(
     low = "darkgreen", mid = "yellow", high = "red", midpoint = 0.5, limits = c(0, 1))+
-  labs(title = "Missed Consensus Labels by Model and Label (Marketing Strategies)",
+  labs(title = "Missed Consensus Labels by Model and Label (Prem Offers)",
        x = "Model", y = "Label Code", fill = "% Missed") +
   theme_minimal()
 
 ggsave(paste(root_folder, "plots/ai_missed_marketing_str.png", sep=""), width = 10, height = 6)
+
+
+
+
+# ===== DIETICIANS
+
+# change to only use the 400 from dieticians
+responses_dieticians <- responses_dieticians %>% 
+  filter(img_id %in% responses_human_all$img_id) %>% arrange(img_id)
+responses_human_all <- responses_human_all %>% 
+  filter(img_id %in% responses_dieticians$img_id) %>% arrange(img_id)
+
+gemma <- gemma %>% 
+  filter(img_id %in% responses_human_all$img_id) %>% arrange(img_id)
+gpt <- gpt %>% 
+  filter(img_id %in% responses_human_all$img_id) %>% arrange(img_id)
+pixtral <- pixtral %>%
+  filter(img_id %in% responses_human_all$img_id) %>% arrange(img_id)
+qwen <- qwen %>% 
+  filter(img_id %in% responses_human_all$img_id) %>% arrange(img_id)
+
+models <- list(gemma = gemma, pixtral = pixtral, gpt = gpt, qwen = qwen)
+
+
+# single-choice
+comparison_df_1000 <- compare_all_raters(responses_human_all, models)
+
+# all together
+comparison_single_all <- comparison_df %>% 
+  filter(str_ends(rater2, ".*_(diet[1-3]|dietcons)$") | str_ends(rater1, ".*_(diet[1-3]|dietcons)$")) %>%
+  rbind(comparison_df_1000)
+
+
+plot_df <- comparison_single_all %>%
+  pivot_longer(cols = c(kappa, prop_agreement, gwet_coeff), names_to = "metric", values_to = "value") %>%
+  mutate(
+    rater1 = sub(".*_(coder[1-3]|diet[1-3]|cons|dietcons)$", "\\1", rater1),
+    rater2 = sub(".*_(coder[1-3]|diet[1-3]|cons|dietcons)$", "\\1", rater2),
+    rater1 = recode(rater1,
+                    coder1 = "Coder 1", coder2 = "Coder 2", coder3 = "Coder 3",
+                    diet1 = "Dietician 1", diet2 = "Dietician 2", diet3 = "Dietician 3",
+                    cons   = "Consensus", dietcons = "Consensus (D)", .default = rater1),
+    rater2 = recode(rater2,
+                    coder1 = "Coder 1", coder2 = "Coder 2", coder3 = "Coder 3",
+                    diet1 = "Dietician 1", diet2 = "Dietician 2", diet3 = "Dietician 3",
+                    cons   = "Consensus", dietcons = "Consensus (D)", .default = rater2),
+    metric = recode(metric, kappa = "Cohen's Kappa", prop_agreement = "% Agreement",
+                    gwet_coeff = "Gwet's AC1")
+  ) 
+
+plot_df_symmetric <- plot_df %>%
+  bind_rows(
+    plot_df %>%
+      rename(rater1 = rater2, rater2 = rater1)
+  ) %>%
+  distinct(question, metric, rater1, rater2, .keep_all = TRUE)
+
+
+plot_df_symmetric %>% 
+  ggplot(aes(x = rater1, y = rater2, fill = value)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(value, 2)), size = 2.3) +
+  facet_grid(metric ~ question, scales = "free", space = "free") +
+  scale_fill_gradient2(
+    low = "red", mid = "yellow", high = "darkgreen",
+    midpoint = 0.5, limits = c(0, 1), name = "Agreement"
+  ) +
+  labs(
+    title = "Agreement Across All Raters (Single-Choice)",
+    x = "Rater 1", y = "Rater 2"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text.y = element_text(angle = -90),
+    panel.spacing = unit(0.5, "lines")
+  )
+
+ggsave(paste(root_folder, "plots/everything_single_mixed.png", sep=""), width = 9, height = 5)
+
+
+# multi-label
+res_ml_1000 <- compare_multilabel_human_ai(responses_human_all, models, 
+                                      consensus = FALSE, multi_label_vars=multi_label_vars)
+
+# all together
+res_ml_all <- res_ml %>% 
+  filter(str_ends(rater2, ".*_(diet[1-3]|dietcons)$") | str_ends(rater1, ".*_(diet[1-3]|dietcons)$")) %>%
+  rbind(res_ml_1000) %>% arrange(question)
+
+plot_df_ml <- res_ml_all %>%
+  select(-kripp_alpha_unweighted) %>%
+  pivot_longer(cols = c(jaccard, kripp_alpha_binary, kripp_alpha_masi), 
+               names_to = "metric", values_to = "value") %>%
+  mutate(
+    rater1 = sub(".*_(coder[1-3]|diet[1-3]|cons|dietcons)$", "\\1", rater1),
+    rater2 = sub(".*_(coder[1-3]|diet[1-3]|cons|dietcons)$", "\\1", rater2),
+    rater1 = recode(rater1,
+                    coder1 = "Coder 1", coder2 = "Coder 2", coder3 = "Coder 3",
+                    diet1 = "Dietician 1", diet2 = "Dietician 2", diet3 = "Dietician 3",
+                    cons   = "Consensus", dietcons = "Consensus (D)", .default = rater1),
+    rater2 = recode(rater2,
+                    coder1 = "Coder 1", coder2 = "Coder 2", coder3 = "Coder 3",
+                    diet1 = "Dietician 1", diet2 = "Dietician 2", diet3 = "Dietician 3",
+                    cons   = "Consensus", dietcons = "Consensus (D)", .default = rater2),
+    metric = recode(metric, jaccard = "Jaccard Similarity",
+                    kripp_alpha_binary = "Krippendorff’s α (Binary)",
+                    kripp_alpha_masi = "Krippendorff’s α (MASI)")
+  )
+
+
+plot_df_sym <- plot_df_ml %>%
+  bind_rows(
+    plot_df_ml %>%
+      rename(rater1 = rater2, rater2 = rater1)
+  )
+
+ggplot(plot_df_sym, aes(x = rater1, y = rater2, fill = value)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(value, 2)), size = 2.3) +
+  facet_grid(metric ~ question, scales = "free", space = "free_x") +
+  scale_fill_gradient2(
+    low = "red", mid = "yellow", high = "darkgreen",
+    midpoint = 0.5, limits = c(0, 1), name = "Agreement"
+  ) +
+  labs(
+    title = "Agreement Across All Raters (Multi-Label)",
+    x = "Rater 1", y = "Rater 2"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text.y = element_text(angle = -90),
+    panel.spacing = unit(0.5, "lines")
+  )
+
+
+ggsave(paste(root_folder, "plots/everything_multiple_mixed.png", sep=""), width = 10, height = 6)
+
+
 
 
 

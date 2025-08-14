@@ -133,6 +133,7 @@ write_xlsx(df_final, paste(root_folder, "dieticians_all_wide.xlsx", sep=""))
 
 
 # build the consensus columns for single choice questions
+#responses_wide_all <- read_excel("C:/Users/P70090005/Desktop/phd/AI-validation/data/dieticians/dieticians_all_wide.xlsx")
 responses_wide_all <- read_excel(paste(root_folder, "dieticians_all_wide.xlsx", sep=""))
 
 responses_dieticians <- responses_wide_all %>%
@@ -163,52 +164,55 @@ for (var in single_choice_vars) {
 # for multi label columns take a mix of intersection/union
 multi_label_vars <- c("prem_offer", "marketing_str", "who_cat", "who_cat_clean")
 
-normalize_label_set <- function(x) {
-  if (is.na(x) || x == "") return(character(0))
-  sort(trimws(unlist(strsplit(x, ","))))
-}
-
-multi_label_consensus <- function(..., return_string = TRUE) {
+multi_label_consensus_majority <- function(..., return_string = TRUE, threshold = 2, brand = TRUE) {
   labels <- list(...)
-  sets <- lapply(labels, normalize_label_set)
   
-  # if any are empty, remove them
-  sets <- sets[lengths(sets) > 0]
-  if (length(sets) == 0) return("NA")
-  
-  # compare all pairwise
-  matches <- sapply(1:length(sets), function(i) {
-    sum(sapply(1:length(sets), function(j) identical(sets[[i]], sets[[j]])))
+  sets <- lapply(labels, function(x) {
+    # if (is.null(x) || is.na(x) || trimws(x) == "-" || trimws(x) == "") {
+    #   return(character(0))
+    # }
+    trimws(strsplit(as.character(x), ",")[[1]])
   })
   
-  # if any exact match (at least 2 coders gave same string)
-  if (any(matches >= 2)) {
-    agreed_set <- sets[[which.max(matches)]]
-    return(if (return_string) paste(agreed_set, collapse = ",") else agreed_set)
-  }
+  sets <- sets[lengths(sets) > 0]
+  if (length(sets) == 0) return(if (return_string) "-" else character(0))
   
-  # no agreement: take intersection
-  intersection <- Reduce(intersect, sets)
-  if (length(intersection) > 0) {
-    return(if (return_string) paste(sort(intersection), collapse = ",") else intersection)
-  }
+  # flatten all labels into one vector
+  all_labels <- unlist(sets, use.names = FALSE)
+  if (length(all_labels) == 0) return(if (return_string) "-" else character(0))
   
-  # if even intersection is empty, return union
-  union_set <- Reduce(union, sets)
-  return(if (return_string) paste(sort(union_set), collapse = ",") else union_set)
+  # count frequency across coders
+  label_counts <- table(all_labels)
+  consensus <- names(label_counts[label_counts >= threshold])
+  
+  if (length(consensus) == 0) {
+    union_set <- Reduce(union, sets)
+    return(if (return_string) paste(sort(union_set), collapse = ",") else union_set)
+  }
+  #if (length(consensus) == 0) return(if (brand) "-" else names(label_counts)[which.max(label_counts)])
+  
+  consensus <- sort(consensus)
+  if (return_string) {
+    paste(consensus, collapse = ", ")
+  } else {
+    consensus
+  }
 }
-
 
 responses_multi_clean <- responses_wide_all %>%
   select(img_id)
 
+# the new multi-label consensus still doesn't work.... 
 for (var in multi_label_vars) {
   
   diet_cols <- paste0(var, "_diet", 1:3)
   responses_multi_clean[diet_cols] <- responses_wide_all[diet_cols]
   
   consensus_col <- paste0(var, "_dietcons")
-  responses_multi_clean[[consensus_col]] <- pmap_chr(responses_wide_all[diet_cols], multi_label_consensus)
+  
+  responses_multi_clean[[consensus_col]] <-
+    pmap_chr(.l = responses_wide_all[diet_cols],
+             ~ multi_label_consensus_majority(..1, ..2, ..3, threshold = 2))
 }
 
 responses_dieticians_all <- left_join(responses_dieticians, responses_multi_clean, by = "img_id")
@@ -218,7 +222,7 @@ responses_dieticians_all <- left_join(responses_dieticians, responses_multi_clea
 #   left_join(responses_dieticians_all, by = "img_id")
 
 # THIS IS THE MAIN DATAFRAME TO BASE THE ANALYSIS ON!!!
-write_xlsx(responses_dieticians_all, paste(root_folder, "dieticians_all_final.xlsx", sep=""))
+write_xlsx(responses_dieticians_all, paste(root_folder, "dieticians_all_final2.xlsx", sep=""))
 
 
 
