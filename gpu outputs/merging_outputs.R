@@ -268,20 +268,23 @@ write_xlsx(gpt_all, paste(root_folder, "gpt_all_outdoor.xlsx", sep=""))
 # =============================================================================
 ### ===== PROCESSING THE SURVEY DATA =====
 
-root_folder <- "C:/Users/P70090005/Documents/survey results + invoices/prolific/"
+root_folder <- "C:/Users/P70090005/Desktop/phd/AI-validation/data/survey crowd/"
 
-responses_dutch <- read.csv(paste(root_folder, "dutch/Dutch survey values.csv", sep=""))
-responses_french <- read.csv(paste(root_folder, "french/French survey values.csv", sep=""))
-responses_english <- read.csv(paste(root_folder, "english/English survey values.csv", sep=""))
+responses_dutch <- read.csv(paste(root_folder, "Dutch survey values.csv", sep=""))
+responses_french <- read.csv(paste(root_folder, "French survey values.csv", sep=""))
+responses_english <- read.csv(paste(root_folder, "English survey values.csv", sep=""))
 
 # remove row 1 and 2
 responses_dutch <- responses_dutch[-c(1,2), ]
 responses_french <- responses_french[-c(1,2), ]
 responses_english <- responses_english[-c(1,2), ]
 
-demo_dutch <- read.csv(paste(root_folder, "dutch/demographic data NL.csv", sep=""))
-demo_french <- read.csv(paste(root_folder, "french/demographic data FR.csv", sep=""))
-demo_english <- read.csv(paste(root_folder, "english/demographic data EN.csv", sep=""))
+demo_dutch <- read.csv(paste(root_folder, "demographic data NL.csv", sep="")) %>%
+  filter(Status == "APPROVED")
+demo_french <- read.csv(paste(root_folder, "demographic data FR.csv", sep="")) %>%
+  filter(Status == "APPROVED")
+demo_english <- read.csv(paste(root_folder, "demographic data EN.csv", sep="")) %>%
+  filter(Status == "APPROVED")
 
 # keep only the approved responses from the demographic data
 responses_dutch_clean <- responses_dutch %>%
@@ -289,8 +292,9 @@ responses_dutch_clean <- responses_dutch %>%
   select(-c("Progress", "ResponseId", "RecordedDate"))
 
 responses_french_clean <- responses_french %>%
-  semi_join(demo_french, by = c("workerId" = "Participant.id")) %>%
-  select(-c("Progress", "ResponseId", "RecordedDate"))
+  semi_join(demo_french, by = c("PROLIFIC_PID" = "Participant.id")) %>%
+  select(-c("Progress", "ResponseId", "RecordedDate")) %>%
+  mutate(workerId = PROLIFIC_PID)
 
 responses_english_clean <- responses_english %>%
   semi_join(demo_english, by = c("workerId" = "Participant.id")) %>%
@@ -318,6 +322,9 @@ responses_all <- responses_all %>% filter(Image1_ID != "")
 nrow(responses_all)  # total number of worker-image answers
 n_distinct(responses_all$workerId)  # total number of unique participants
 
+write_xlsx(responses_all, paste(root_folder, "responses_all.xlsx", sep=""))
+
+
 ###========================================================================
 
 # check duration per response
@@ -344,7 +351,10 @@ reshape_qualtrics_responses <- function(responses_clean, variables = variables) 
   for (i in 1:5) {
     # map old column names to new names
     var_oldnames <- paste0(variables, "_image", i)
-    var_newnames <- variables
+    prem_text <- paste0("prem_offer_image", i , "_10_TEXT")
+    marketing_text <- paste0("marketing_str_image", i , "_11_TEXT")
+    var_oldnames <- c(var_oldnames, prem_text, marketing_text)
+    var_newnames <- c(variables, "marketing_str_text", "prem_offer_text")
     
     meta_oldnames <- c(paste0("Image", i, "_ID"),
                        paste0("Image", i, "_Brand"),
@@ -388,10 +398,10 @@ responses_long_all %>% group_by(Image_ID) %>% count() %>%
   filter(n < 3)
 
 # ===== !!! REMOVE ADS WITH <3 CODINGS !!! ===== 
-responses_long_all <- responses_long_all %>%
-  group_by(Image_ID) %>%
-  filter(n() >= 3) %>%
-  ungroup()
+# responses_long_all <- responses_long_all %>%
+#   group_by(Image_ID) %>%
+#   filter(n() >= 3) %>%
+#   ungroup()
 
 # now do the alcohol manipulation (new ad type and who_cat)
 responses_long_all <- responses_long_all %>%
@@ -467,23 +477,72 @@ responses_long_indexed <- responses_long_all %>%
   mutate(coder_number = paste0("coder", row_number())) %>%
   ungroup()
 
-write_xlsx(responses_long_indexed, paste(root_folder, "clean results all/responses_all_long.xlsx", sep=""))
+# only keep 3 coders
+responses_long_indexed <- responses_long_indexed %>%
+  filter(coder_number %in% c("coder1", "coder2", "coder3"))
 
+write_xlsx(responses_long_indexed, paste(root_folder, "responses_all_long.xlsx", sep=""))
+
+# get the demographic data from the workers
+responses_long_indexed %>%
+  distinct(workerId)
+
+demo_all <- responses_all[, c(3:7, 194, 224:234)] 
+
+demo_all <- demo_all %>%
+  mutate(workerId = coalesce(workerId, PROLIFIC_PID)) %>%
+  distinct(workerId, .keep_all = TRUE) %>%
+  inner_join(tibble(workerId = unique(responses_long_indexed$workerId)), by = "workerId") %>%
+  mutate(consent = coalesce(consent_nl, consent_fr, consent_en),
+         age = coalesce(age_nl, age_fr, age_en),
+         gender = coalesce(gender_nl, gender_fr, gender_en),
+         education = coalesce(education_nl, education_fr, education_en)) %>%
+  select(c(workerId, Duration_minutes, language, age, gender, education, consent)) %>%
+  mutate(
+    consent = recode(consent, "4" = "Agree", "5" = "Disagree"),
+    age = recode(age, "1" = "18–24", "2" = "25–34", "3" = "35–44",
+                 "4" = "45–54", "5" = "55–64", "6" = "65+"),
+    gender = recode(gender, "1" = "Male", "2" = "Female", "3" = "Non-binary",
+                    "4" = "Prefer not to say"),
+    education = recode(education, "1" = "< Secondary", "2" = "Secondary", "3" = "Bachelor",
+                       "4" = "Master", "5" = "Doctorate", "6" = "Vocational training"))
+
+demo_all_lang <- rbind(demo_dutch, demo_french, demo_english) %>% 
+  select(c(Participant.id, Total.approvals, Primary.language, Age, Sex, Ethnicity.simplified, Country.of.birth,
+           Country.of.residence, Nationality, Language, Student.status, Employment.status)) %>%
+  distinct(Participant.id, .keep_all = TRUE)
+demo_all <- demo_all %>%
+  inner_join(demo_all_lang, by = c("workerId" = "Participant.id")) 
+
+
+write_xlsx(demo_all, paste(root_folder, "demographics_crowd.xlsx", sep=""))
+
+demo_all <- read_excel(paste(root_folder, "demographics_crowd.xlsx", sep=""))
+
+
+demo_all %>%
+  ggplot(aes(x = age)) +
+    geom_bar()
+
+
+
+library(tidyverse)
 
 # now pivot wider for all variables
 responses_wide_all <- responses_long_indexed %>%
   pivot_wider(
-    id_cols = ad_id,
-    names_from = diet_number,
-    values_from = c(ad_type, new_type_ad, target_group, alcohol, non_alcohol, prem_offer, marketing_str, who_cat, who_cat_clean)
+    id_cols = Image_ID,
+    names_from = coder_number,
+    values_from = c(ad_type, new_type_ad, target_group, alcohol, non_alcohol, prem_offer, 
+                    prem_offer_text, marketing_str, marketing_str_text,who_cat, who_cat_clean)
   )
 
-write_xlsx(responses_wide_all, paste(root_folder, "clean results all/responses_all_wide.xlsx", sep=""))
+write_xlsx(responses_wide_all, paste(root_folder, "responses_all_wide.xlsx", sep=""))
 
 names(responses_wide_all)
 
 # build the consensus columns for single choice questions
-responses_wide_all <- read_excel(paste(root_folder, "responses_human_final.xlsx", sep=""))
+#responses_wide_all <- read_excel(paste(root_folder, "responses_human_final.xlsx", sep=""))
 
 responses_human_clean <- responses_wide_all %>%
   select(Image_ID)
@@ -513,57 +572,57 @@ for (var in single_choice_vars) {
 # for multi label columns take a mix of intersection/union
 multi_label_vars <- c("prem_offer", "marketing_str", "who_cat", "who_cat_clean")
 
-normalize_label_set <- function(x) {
-  if (is.na(x) || x == "") return(character(0))
-  sort(trimws(unlist(strsplit(x, ","))))
-}
-
-multi_label_consensus <- function(..., return_string = TRUE) {
-  labels <- list(...)
-  sets <- lapply(labels, normalize_label_set)
-  
-  # if any are empty, remove them
-  sets <- sets[lengths(sets) > 0]
-  if (length(sets) == 0) return("NA")
-  
-  # compare all pairwise
-  matches <- sapply(1:length(sets), function(i) {
-    sum(sapply(1:length(sets), function(j) identical(sets[[i]], sets[[j]])))
-  })
-  
-  # if any exact match (at least 2 coders gave same string)
-  if (any(matches >= 2)) {
-    agreed_set <- sets[[which.max(matches)]]
-    return(if (return_string) paste(agreed_set, collapse = ",") else agreed_set)
-  }
-  
-  # no agreement: take intersection
-  intersection <- Reduce(intersect, sets)
-  if (length(intersection) > 0) {
-    return(if (return_string) paste(sort(intersection), collapse = ",") else intersection)
-  }
-  
-  # if even intersection is empty, return union
-  union_set <- Reduce(union, sets)
-  return(if (return_string) paste(sort(union_set), collapse = ",") else union_set)
-}
-
-
-responses_multi_clean <- responses_wide_all %>%
-  select(Image_ID)
-
-for (var in multi_label_vars) {
-  
-  coder_cols <- paste0(var, "_coder", 1:3)
-  responses_multi_clean[coder_cols] <- responses_wide_all[coder_cols]
-  
-  consensus_col <- paste0(var, "_cons")
-  responses_multi_clean[[consensus_col]] <- pmap_chr(responses_wide_all[coder_cols], multi_label_consensus)
-}
-
-responses_human_all <- left_join(responses_human_clean, responses_multi_clean, by = "Image_ID")
-# THIS IS THE MAIN DATAFRAME TO BASE THE ANALYSIS ON!!!
-write_xlsx(responses_human_all, paste(root_folder, "clean results all/responses_human_final.xlsx", sep=""))
+# normalize_label_set <- function(x) {
+#   if (is.na(x) || x == "") return(character(0))
+#   sort(trimws(unlist(strsplit(x, ","))))
+# }
+# 
+# multi_label_consensus <- function(..., return_string = TRUE) {
+#   labels <- list(...)
+#   sets <- lapply(labels, normalize_label_set)
+#   
+#   # if any are empty, remove them
+#   sets <- sets[lengths(sets) > 0]
+#   if (length(sets) == 0) return("NA")
+#   
+#   # compare all pairwise
+#   matches <- sapply(1:length(sets), function(i) {
+#     sum(sapply(1:length(sets), function(j) identical(sets[[i]], sets[[j]])))
+#   })
+#   
+#   # if any exact match (at least 2 coders gave same string)
+#   if (any(matches >= 2)) {
+#     agreed_set <- sets[[which.max(matches)]]
+#     return(if (return_string) paste(agreed_set, collapse = ",") else agreed_set)
+#   }
+#   
+#   # no agreement: take intersection
+#   intersection <- Reduce(intersect, sets)
+#   if (length(intersection) > 0) {
+#     return(if (return_string) paste(sort(intersection), collapse = ",") else intersection)
+#   }
+#   
+#   # if even intersection is empty, return union
+#   union_set <- Reduce(union, sets)
+#   return(if (return_string) paste(sort(union_set), collapse = ",") else union_set)
+# }
+# 
+# 
+# responses_multi_clean <- responses_wide_all %>%
+#   select(Image_ID)
+# 
+# for (var in multi_label_vars) {
+#   
+#   coder_cols <- paste0(var, "_coder", 1:3)
+#   responses_multi_clean[coder_cols] <- responses_wide_all[coder_cols]
+#   
+#   consensus_col <- paste0(var, "_cons")
+#   responses_multi_clean[[consensus_col]] <- pmap_chr(responses_wide_all[coder_cols], multi_label_consensus)
+# }
+# 
+# responses_human_all <- left_join(responses_human_clean, responses_multi_clean, by = "Image_ID")
+# # THIS IS THE MAIN DATAFRAME TO BASE THE ANALYSIS ON!!!
+# write_xlsx(responses_human_all, paste(root_folder, "clean results all/responses_human_final.xlsx", sep=""))
 
 # ================ DATA PROCESSING ENDS HERE ========================
 
@@ -629,15 +688,23 @@ for (var in multi_label_vars) {
 }
 
 responses_human_all <- left_join(responses_human_clean, responses_multi_clean, by = "Image_ID")
-
-responses_human_all <- responses_wide_all %>% 
-  select(Image_ID, img_id, category, language) %>% 
-  left_join(responses_human_all, by = "Image_ID") %>%
+responses_human_all <- responses_human_all %>%
+  left_join(select(responses_wide_all, matches("_text_coder[1-3]$"), "Image_ID"),
+                                 by = "Image_ID") %>%
+  mutate(img_id = sub("\\.png$", "", Image_ID)) %>%
   select(-Image_ID)
 
 
-write_xlsx(responses_human_all, paste(root_folder, "responses_human_final_new.xlsx", sep=""))
+write_xlsx(responses_human_all, paste(root_folder, "responses_human_final.xlsx", sep=""))
 
+
+
+responses_human <- read_excel(paste(root_folder, "responses_human_final.xlsx", sep=""))
+
+responses_human %>%
+  filter(is.na(marketing_str_text_coder1),
+         is.na(marketing_str_text_coder2),
+         is.na(marketing_str_text_coder3))
 
 
 

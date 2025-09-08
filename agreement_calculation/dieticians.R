@@ -122,7 +122,8 @@ responses_final <- responses_long %>%
   pivot_wider(
     id_cols = ad_id,
     names_from = diet_number,
-    values_from = c(ad_type, new_type_ad, target_group, alcohol, non_alcohol, prem_offer, marketing_str, who_cat, who_cat_clean)
+    values_from = c(ad_type, new_type_ad, target_group, alcohol, non_alcohol, prem_offer, marketing_str, who_cat, who_cat_clean,
+                    marketing_str_11_TEXT, prem_offer_10_TEXT)
   ) %>% 
   arrange(ad_id)
 
@@ -217,12 +218,16 @@ for (var in multi_label_vars) {
 
 responses_dieticians_all <- left_join(responses_dieticians, responses_multi_clean, by = "img_id")
 
+responses_dieticians_all <- responses_dieticians_all %>%
+  left_join(select(responses_wide_all, matches("_TEXT_diet[1-3]$"), "img_id"),
+            by = "img_id")
+
 # responses_dieticians_all <- responses_wide_all %>% 
 #   select(img_id, brand_diet1, brand_diet2, brand_diet3) %>%
 #   left_join(responses_dieticians_all, by = "img_id")
 
 # THIS IS THE MAIN DATAFRAME TO BASE THE ANALYSIS ON!!!
-write_xlsx(responses_dieticians_all, paste(root_folder, "dieticians_all_final2.xlsx", sep=""))
+write_xlsx(responses_dieticians_all, paste(root_folder, "dieticians_all_final.xlsx", sep=""))
 
 
 

@@ -52,20 +52,19 @@ merge_ai_human_column <- function(models, humans = NULL, column, dieticians = NU
   
   if (!is.null(dieticians)) {
     col <- ifelse(column != "brand", human_mapping[[column]], column)
-    diet_cols <- grep( 
-      paste0("^", col, "_(diet[1-3]|dietcons)$"), 
-      names(dieticians), value = TRUE 
-    ) 
-    diet_preds <- dieticians %>%
-      select(c(img_id, all_of(diet_cols))) %>%
-      rename(diet1 = paste(col, "_diet1", sep=""),
-             diet2 = paste(col, "_diet2", sep=""),
-             diet3 = paste(col, "_diet3", sep=""),
-             dietcons = paste(col, "_dietcons", sep=""))
+    diet_cols <- grep(paste0("^", col, "_(diet[1-3]|dietcons)$"), names(dieticians), value = TRUE)
+    
+    if (length(diet_cols) > 0) {
+      diet_dt <- as.data.table(dieticians)[, c("img_id", diet_cols), with = FALSE]
+      setnames(diet_dt, 
+               old = diet_cols,
+               new = c("diet1", "diet2", "diet3", "dietcons")[1:length(diet_cols)])
+      result <- merge(result, diet_dt, by = "img_id", all = TRUE)
+    }
   }
   
   if (!is.null(humans) & !is.null(dieticians))
-    merged <- ull_join(full_join(model_preds, human_cons, by = "img_id"), diet_preds, by="img_id")
+    merged <- full_join(full_join(model_preds, human_cons, by = "img_id"), diet_preds, by="img_id")
   else if (is.null(humans))
     merged <- full_join(model_preds, diet_preds, by="img_id")
   else if (is.null(dieticians))
@@ -127,6 +126,7 @@ compare_human_ai_kappa <- function(humans, models, dieticians = NULL) {
           question = question,
           model = model_name,
           coder = hc,
+          n = nrow(merged),
           prop_agreement = prop_agreement,
           kappa = kappa2$kappa,
           kappa_conf_low = kappa2$confid[1, "lower"],
@@ -192,6 +192,7 @@ compare_all_raters <- function(humans, models, dieticians = NULL) {
         question = question,
         rater1 = pair[1],
         rater2 = pair[2],
+        n = nrow(merged),
         prop_agreement = prop_agreement,
         kappa = kappa2$kappa,
         kappa_conf_low = kappa2$confid[1, "lower"],
@@ -223,53 +224,48 @@ jaccard_similarity <- function(str1, str2) {
 # Measuring Agreement on Set-valued Items (MASI) distance from text string
 # retrieved from https://gdmcdonald.github.io/multi-label-inter-rater-agreement/Multi-Label_Agreement.html
 masi <- function(x, y, sep = ", ", jaccard_only = F, type = "sim"){
+  # handle NA cases early
+  if (is.na(x) || is.na(y)) return(NA_real_)
+  
   # define the labels for each rater
-  lab_x <- str_split(x, ", ", simplify = F)[[1]]
-  lab_y <- str_split(y, ", ", simplify = F)[[1]]
+  lab_x <- strsplit(x, sep, fixed = TRUE)[[1]]
+  lab_y <- strsplit(y, sep, fixed = TRUE)[[1]]
   
   # compute set diff and intersection size
-  diff_xy_size <- length(setdiff(lab_x,lab_y)) # number of elements in set x but not in set y
-  diff_yx_size <- length(setdiff(lab_y,lab_x)) # number of elements in set y but not in set x
   intersection_size <- length(intersect(lab_x,lab_y)) # number of elements in common between two sets
+  diff_xy_size <- length(lab_x) - intersection_size # number of elements in set x but not in set y
+  diff_yx_size <- length(lab_y) - intersection_size # number of elements in set y but not in set x
   
   # monotonicity similarity coefficient, M, see http://www.lrec-conf.org/proceedings/lrec2006/pdf/636_pdf.pdf Rebecca Passonneau. 2006. Measuring Agreement on Set-valued Items (MASI) for Semantic and Pragmatic Annotation. In Proceedings of the Fifth International Conference on Language Resources and Evaluation (LREC’06), Genoa, Italy. European Language Resources Association (ELRA).
-  m_sim <- case_when(
-    (diff_xy_size == 0) & (diff_yx_size == 0) ~ 1, # the sets are identical, return 1
-    (diff_xy_size == 0) | (diff_yx_size == 0) ~ 2/3, # one set is a subset of the other, return 2/3
-    (diff_xy_size != 0) & (diff_yx_size != 0) & (intersection_size !=0) ~ 1/3, # some overlap, some non-overlap in each set, return 1/3
-    intersection_size ==0 ~ 0 # disjoint sets, return 0
-  )
+  m_sim <- if (diff_xy_size == 0 && diff_yx_size == 0) {
+    1 # the sets are identical, return 1
+  } else if (diff_xy_size == 0 || diff_yx_size == 0) {
+    2/3 # one set is a subset of the other, return 2/3
+  } else if (intersection_size > 0) {
+    1/3 # some overlap, some non-overlap in each set, return 1/3
+  } else {
+    0 # disjoint sets, return 0
+  }
   
   # calculate Jaccard simmilarity; J=1 means same, J=0 means no overlap at all. See https://en.wikipedia.org/wiki/Jaccard_index
   jaccard_sim <- intersection_size/(length(lab_x) + length(lab_y) - intersection_size)
   
   #MASI sim is M*J; MASI dist is 1-M*J
-  masi_sim <- if_else(jaccard_only,
-                      jaccard_sim,
-                      m_sim*jaccard_sim)
-  
-  return(if_else(type == "sim",
-                 masi_sim,
-                 1-masi_sim))
+  masi_sim <- if (jaccard_only) jaccard_sim else m_sim * jaccard_sim
+  return(if (type == "sim") masi_sim else 1 - masi_sim)
 }
+
 
 MASI_simmilarity_matrix <- function(df, sep = ", ") {
   labels_all_combos <- sort(unique(unlist(df))) # alphabetical sorted list of all strings of labels
   
-  num_label_combos <- length(labels_all_combos) # number of combinations above
+  n_labels <- length(labels_all_combos) # number of combinations above
   
-  masi_sim_mat <- matrix(nrow = num_label_combos,
-                         ncol = num_label_combos,
-                         dimnames = list(labels_all_combos,
-                                         labels_all_combos))
+  # use outer() for vectorized computation
+  masi_sim_mat <- outer(labels_all_combos, labels_all_combos, 
+                        Vectorize(function(x, y) masi(x, y, sep = sep)))
   
-  for(i in 1:num_label_combos){
-    for(j in 1:num_label_combos)
-    {
-      masi_sim_mat[i,j] <- masi(x = labels_all_combos[i],
-                                y = labels_all_combos[j],
-                                sep = sep)
-    }}
+  dimnames(masi_sim_mat) <- list(labels_all_combos, labels_all_combos)
   
   return(masi_sim_mat)
 }
@@ -299,7 +295,9 @@ compute_kripp_alpha_binary <- function(human, ai, labels) {
 
 # EVERYTHING TOGETHER
 # if consesnsus = TRUE, compute agreement ONLY with the human consensus column
-compare_multilabel_human_ai <- function(humans, models, consensus = TRUE, dieticians = NULL, multi_label_vars = multi_label_vars) { 
+# if filter_other = TRUE, remove the ads where humans selected 'Other' for marketing strategies and prem offers
+compare_multilabel_human_ai <- function(humans, models, consensus = TRUE, dieticians = NULL, multi_label_vars = multi_label_vars,
+                                        filter_other = FALSE) { 
   out <- list(); idx <- 1 
   
   if (!is.null(dieticians)) {
@@ -311,14 +309,10 @@ compare_multilabel_human_ai <- function(humans, models, consensus = TRUE, dietic
     ai_col <- ifelse(question != "brand", ai_mapping[[question]], question)
     human_base <- ifelse(question != "brand", human_mapping[[question]], question)
     
-    if (consensus) {
-      human_cols <- paste0(human_base, "_(cons|dietcons)$")
+    human_cols <- if (consensus) {
+      grep(paste0("^", human_base, "_(cons|dietcons)$"), names(humans), value = TRUE)
     } else {
-      # grab coder1/2/3 + consensus col names 
-      human_cols <- grep( 
-        paste0("^", human_base, "_(coder[1-3]|diet[1-3]|cons|dietcons)$"), 
-        names(humans), value = TRUE 
-      ) 
+      grep(paste0("^", human_base, "_(coder[1-3]|diet[1-3]|cons|dietcons)$"), names(humans), value = TRUE)
     }
     
     if (length(human_cols) < 1) next 
@@ -349,15 +343,36 @@ compare_multilabel_human_ai <- function(humans, models, consensus = TRUE, dietic
       
       if (nrow(merged) == 0) next
       
+      if (filter_other && question %in% c("prem_offer", "marketing_str")) {
+        is_ai1 <- pair[1] %in% names(models)
+        is_ai2 <- pair[2] %in% names(models)
+        
+        # only if exactly one rater is AI (AI–human pair)
+        if (xor(is_ai1, is_ai2)) {
+          human_rater_col <- if (is_ai1) pair[2] else pair[1]
+          # find corresponding _text_ column for that human/diet rater (skip consensus)
+          human_text_col <- if (human_rater_col %in% names(humans)) {
+            find_text_col(human_base, human_rater_col, names(humans))
+          } else NULL
+          
+          if (!is.null(human_text_col)) {
+            merged <- merge(merged, humans[, c("img_id", human_text_col), drop = FALSE],
+                            by = "img_id", all.x = TRUE)
+            # keep only rows where human's text col is NA (didn't pick 'Other')
+            merged <- merged[is.na(merged[[human_text_col]]), , drop = FALSE]
+            if (nrow(merged) == 0) next
+            merged <- merged[, setdiff(names(merged), human_text_col), drop = FALSE]
+          }
+          # if NULL (consensus) -> no filtering
+        }
+        # human–human or AI–AI pairs -> no filtering
+      }
+      
       # 1) avg Jaccard 
       sims <- mapply(jaccard_similarity, merged$label.x, merged$label.y) 
       jacc <- mean(sims, na.rm = TRUE) 
       
-      # 2) IoU‐alpha: build 1×N distance vector 
-      # d <- 1 - sims 
-      # alpha <- kripp_alpha_interval(matrix(d, nrow = 1)) 
-      
-      # 3) binary Krippendorff's alpha
+      # 2) binary Krippendorff's alpha
       # get all possible labels across human & ai strings
       all_labels <- unique(unlist(strsplit(
         na.omit(c(merged$label.x, merged$label.y)), split = ",\\s*"
@@ -365,10 +380,10 @@ compare_multilabel_human_ai <- function(humans, models, consensus = TRUE, dietic
       
       alpha_bin <- compute_kripp_alpha_binary(merged$label.x, merged$label.y, all_labels)
       
-      # 4) Krippendorff's kappa using irrCOC
+      # 3) Krippendorff's kappa using irrCOC
       alpha_unweighted <- krippen.alpha.raw(ratings=data.frame(merged$label.x, merged$label.y))$est
       
-      # 5) Krippendorff's Alpha using MASI weights
+      # 4) Krippendorff's Alpha using MASI weights
       wt <- MASI_simmilarity_matrix(data.frame(merged$label.x, merged$label.y), sep = ", ")
       alpha_masi <- krippen.alpha.raw(ratings=data.frame(merged$label.x, merged$label.y), weights = wt)$est
       
@@ -376,8 +391,8 @@ compare_multilabel_human_ai <- function(humans, models, consensus = TRUE, dietic
         question = question, 
         rater1 = pair[1],
         rater2 = pair[2],
-        jaccard = jacc, 
-        #kripp_alpha_iou = alpha,
+        n = nrow(merged),
+        jaccard = jacc,
         kripp_alpha_binary = alpha_bin,
         kripp_alpha_unweighted = alpha_unweighted$coeff.val,
         kripp_alpha_unweighted_ci = alpha_unweighted$conf.int,
@@ -518,7 +533,11 @@ find_disagreeing_ads <- function(models, column, humans) {
 single_disagreement_by_label <- function(models, humans = NULL, column, dieticians = NULL) {
   
   merged <- merge_ai_human_column(models, humans, column, dieticians)
-    #filter(!is.na(consensus))  # remove rows with no consensus
+  
+  if (!is.null(dieticians)) 
+    merged <- filter(merged, !is.na(merged$dietcons))
+  
+  #models <- lapply(models, function(model){ filter(model, model[img_id] %in% merged$img_id)})
   
   label_col <- if (!is.null(humans)) "consensus" else "dietcons"
   # count for each consensus label
@@ -551,7 +570,9 @@ single_disagreement_by_label <- function(models, humans = NULL, column, dieticia
 multi_disagreement_by_label <- function(models, humans = NULL, column, dieticians = NULL) {
   
   merged <- merge_ai_human_column(models, humans, column, dieticians)
-    #filter(!is.na(consensus))  # filter empty rows
+  
+  if (!is.null(dieticians)) 
+    merged <- filter(merged, !is.na(merged$dietcons))
   
   # get unique labels from consensus
   label_col <- if (!is.null(humans)) "consensus" else "dietcons"
@@ -632,5 +653,16 @@ clean_brand <- function(x) {
   paste(brands, collapse = ", ")
 }
 
+
+# helper: for human/diet columns like "<base>_coder1"/"<base>_diet2" return "<base>_text_coder1"/"_diet2"
+# returns NULL for consensus columns
+find_text_col <- function(human_base, rater_col, humans_names) {
+  suf <- sub(paste0("^", human_base, "_"), "", rater_col)
+  if (suf %in% c("cons", "dietcons")) return(NULL)  # never filter consensus
+  hits <- grep(paste0("^", human_base, "_text_", suf, "$"),
+               humans_names, value = TRUE, ignore.case = TRUE)
+  if (length(hits) == 0) return(NULL)
+  hits[1]
+}
 
 
