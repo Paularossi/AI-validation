@@ -4,16 +4,56 @@ library(ggplot2)
 library(readxl)
 
 # ==============================================================================
-root_folder <- "C:/Users/P70090005/Documents/AI-validation/gpu outputs/"
+root_folder <- "C:/Users/P70090005/Desktop/phd/AI-validation/gpu outputs/"
 responses_human_all <- read_excel(paste(root_folder, "responses_human_final.xlsx", sep=""))
 single_choice_vars <- c("new_type_ad", "target_group", "alcohol")
 multi_label_vars <- c("who_cat_clean", "prem_offer", "marketing_str")
 
 # check the single choice questions
-agreement_single_cols <- function(responses_wide, variable_cols) {
+# agreement_single_cols <- function(responses_wide, variable_cols) {
+#   
+#   results <- lapply(variable_cols, function(var_name) {
+#     # auto-select the coder columns for this variable
+#     coder_cols <- grep(paste0("^", var_name, "_coder[123]$"), names(responses_wide), value = TRUE)
+#     
+#     if (length(coder_cols) != 3) {
+#       warning(paste("Skipping", var_name, ": found", length(coder_cols), "coder columns (expected 3)"))
+#       return(NULL)
+#     }
+#     
+#     human_matrix <- responses_wide %>%
+#       select(all_of(coder_cols))
+#     
+#     names(human_matrix) <- paste0("coder", 1:3)
+#     
+#     # Fleiss' Kappa
+#     fleiss_result <- kappam.fleiss(human_matrix)
+#     
+#     # full agreement prop
+#     prop_full_agreement <- mean(apply(human_matrix, 1, function(x) length(unique(x)) == 1))
+#     
+#     pairwise <- combn(names(human_matrix), 2, simplify = FALSE)
+#     
+#     pairwise_df <- do.call(rbind, lapply(pairwise, function(pair) {
+#       k <- kappa2(human_matrix[, pair])
+#       data.frame(
+#         variable = var_name,
+#         coder_pair = paste(pair, collapse = "_"),
+#         fleiss_kappa = fleiss_result$value,
+#         fleiss_p = fleiss_result$p.value,
+#         prop_full_agreement = prop_full_agreement,
+#         cohen_kappa = k$value,
+#         p_value = k$p.value
+#       )
+#     }))
+#   })
+#   
+#   bind_rows(results[!sapply(results, is.null)])
+# }
+
+compute_agreement_columns <- function(responses_wide, variable_cols) {
   
   results <- lapply(variable_cols, function(var_name) {
-    # auto-select the coder columns for this variable
     coder_cols <- grep(paste0("^", var_name, "_coder[123]$"), names(responses_wide), value = TRUE)
     
     if (length(coder_cols) != 3) {
@@ -21,41 +61,51 @@ agreement_single_cols <- function(responses_wide, variable_cols) {
       return(NULL)
     }
     
-    human_matrix <- responses_wide %>%
-      select(all_of(coder_cols))
+    human_df <- responses_wide %>% select(all_of(coder_cols))
+    names(human_df) <- paste0("coder", 1:3)
     
-    names(human_matrix) <- paste0("coder", 1:3)
+    fleiss_result <- kappam.fleiss(as.matrix(human_df))
+    prop_full_agreement <- mean(apply(human_df, 1, function(x) length(unique(x)) == 1))
     
-    # Fleiss' Kappa
-    fleiss_result <- kappam.fleiss(human_matrix)
-    
-    # full agreement prop
-    prop_full_agreement <- mean(apply(human_matrix, 1, function(x) length(unique(x)) == 1))
-    
-    pairwise <- combn(names(human_matrix), 2, simplify = FALSE)
+    pairwise <- combn(names(human_df), 2, simplify = FALSE)
     
     pairwise_df <- do.call(rbind, lapply(pairwise, function(pair) {
-      k <- kappa2(human_matrix[, pair])
+      k <- kappa2(human_df[, pair])
       data.frame(
         variable = var_name,
-        coder_pair = paste(pair, collapse = "_"),
         fleiss_kappa = fleiss_result$value,
         fleiss_p = fleiss_result$p.value,
         prop_full_agreement = prop_full_agreement,
+        coder_pair = paste(pair, collapse = "_"),
         cohen_kappa = k$value,
         p_value = k$p.value
       )
     }))
+    
+    pairwise_df
   })
   
   bind_rows(results[!sapply(results, is.null)])
 }
 
-agreement_summary <- agreement_single_cols(responses_wide = responses_human_all, variable_cols = single_choice_vars)
+single_choice_agreement <- compute_agreement_columns(responses_wide = responses_human_all, variable_cols = single_choice_vars)
+#agreement_summary <- agreement_single_cols(responses_wide = responses_human_all, variable_cols = single_choice_vars)
 
-fleiss_rows <- agreement_summary %>%
-  distinct(variable, fleiss_kappa, fleiss_p) %>%
-  mutate(coder_pair = "Fleiss", cohen_kappa = fleiss_kappa, p_value = fleiss_p)
+kappa_matrix <- single_choice_agreement %>%
+  select(question, model_1, model_2, kappa) %>%
+  mutate(metric = "Cohen's Kappa", value = kappa)
+
+agreement_matrix <- single_choice_agreement %>%
+  select(question, model_1, model_2, agreement) %>%
+  mutate(metric = "% Agreement", value = agreement)
+
+plot_df <- bind_rows(kappa_matrix, agreement_matrix)
+
+plot_df_symmetric <- plot_df %>%
+  bind_rows(
+    plot_df %>%
+      rename(model_1 = model_2, model_2 = model_1)
+  )
 
 plot_df <- bind_rows(
   agreement_summary %>% select(variable, coder_pair, cohen_kappa, p_value),
@@ -79,7 +129,7 @@ ggplot(plot_df, aes(x = variable, y = cohen_kappa, fill = coder_pair)) +
 ggsave("C:/Users/P70090005/Documents/AI-validation/gpu outputs/plots/humans_single_cols.png", width = 9, height = 5)
 
 
-# now for multi-label columns
+# ===== MULTI-CHOICE COLUMNS =====
 library(krippendorffsalpha)
 
 jaccard_similarity <- function(str1, str2) {
@@ -100,7 +150,8 @@ agreement_multiple_cols <- function(responses_wide_all, variable_list) {
   
   for (var_name in variable_list) {
     # 1) detect all coder columns for this variable
-    coder_cols <- grep(paste0("^", var_name, "_coder"), names(responses_wide_all), value = TRUE)
+    coder_cols <- grep(paste0("^", var_name, "_coder"), names(responses_wide_all), value = TRUE) 
+    consensus_col <- paste0(var_name, "_cons") # and consensus
     
     n_coders <- length(coder_cols)
     if (n_coders < 2) {
@@ -110,11 +161,10 @@ agreement_multiple_cols <- function(responses_wide_all, variable_list) {
     
     # 2) pull out only those columns + img_id
     df <- responses_wide_all %>%
-      select(all_of(coder_cols))
+      select(all_of(c(coder_cols, consensus_col)))
     
-    # rename them uniformly to coder1... coderN
-    new_names <- paste0("coder", seq_len(n_coders))
-    df <- `colnames<-`(df, new_names)
+    # rename them
+    names(df) <- c(paste0("coder", 1:3), "consensus")
     
     # --- 3) pairwise Jaccard similarity across all coder pairs ---
     model_pairs <- combn(names(df), 2, simplify = FALSE)
@@ -127,7 +177,7 @@ agreement_multiple_cols <- function(responses_wide_all, variable_list) {
     # --- 4) build long‐form binary table for per‐label alpha ---
     df_long <- df %>%
       mutate(img_id = row_number()) %>%
-      pivot_longer(cols = starts_with("coder"), names_to = "coder", values_to = "labels") %>%
+      pivot_longer(cols = -img_id,, names_to = "coder", values_to = "labels") %>%
       mutate(labels = gsub("\\s+", "", labels)) %>%
       separate_rows(labels, sep = ",") %>%
       mutate(value = 1, label = paste0("label_", labels)) %>%

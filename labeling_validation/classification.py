@@ -9,11 +9,11 @@ import pandas as pd
 import torch
 from PIL import Image
 
-from huggingface_hub import login
-from transformers import AutoModelForImageTextToText, Gemma3ForConditionalGeneration, AutoProcessor, LlavaForConditionalGeneration, AutoModelForCausalLM, Qwen2_5_VLForConditionalGeneration
-from qwen_vl_utils import process_vision_info
+#from huggingface_hub import login
+#from transformers import AutoModelForImageTextToText, Gemma3ForConditionalGeneration, AutoProcessor, LlavaForConditionalGeneration, AutoModelForCausalLM, Qwen2_5_VLForConditionalGeneration
+#from qwen_vl_utils import process_vision_info
 
-from persistent.AI_validation.labeling_validation.WHO_questions import *
+from labeling_validation.WHO_questions import *
 
 # run this file in the terminal with `nohup python3 -m persistent.AI_validation.labeling_validation.classification`
 
@@ -23,18 +23,23 @@ torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
 TEXT_MODELS = ["google/gemma-3-12b-it"]
 MULTIMODAL_MODELS = "Qwen/Qwen2.5-VL-32B-Instruct"
-API_MODELS = ["gpt-4o", "pixtral-12b-2409"]
+API_MODELS = ["gpt-4o", "pixtral-12b-2409", "deepseek/deepseek-chat-v3-0324:free", "meta-llama/llama-3.2-11b-vision-instruct:free"]
+
+# to find out if the models are reasoning models, check:
+# Benchmark evaluations on reasoning tasks (e.g., GSM8K, ARC, BIG-Bench, MMLU, CommonsenseQA)
+# Phrases like "chain-of-thought", "multi-step inference", "systematic generalization"
 
 AD_PATTERN = re.compile(r"(.+?)\.(png|jpeg|jpg)")
 
 all_questions = [alcohol, type_ad, marketing_str, premium_offer, who_cat, target_age_group]
 expected_labels = [label for section in all_questions for (label, _) in section] + ['SPECULATION_LEVEL'] # all question labels
 
-image_folder = "persistent/AI_validation/data/1000_images" # all the images
+#image_folder = "data/1000_images" # all the images
+image_folder = "data/outdoor ads/100 ads" # outdoor ads
 images = [file for file in os.listdir(image_folder) if file.lower().endswith(('.jpg', '.jpeg', '.png'))]
 
 # read the keys
-with open('persistent/AI_validation/keys.txt') as f:
+with open('keys.txt') as f:
     json_data = json.load(f)
 
 hugg_key = json_data["huggingface"]
@@ -54,13 +59,20 @@ mistral_model_id = "pixtral-12b-2409"
 mistral_api_url = "https://api.mistral.ai/v1/chat/completions"
 mistral_api_key = json_data["mistralai"]
 
+# === DeepSeek ===
+deepseek_model_id = "deepseek/deepseek-chat-v3-0324:free"
+llama_model_id = "meta-llama/llama-3.2-11b-vision-instruct:free"
+
+openrouter_api_url = "https://openrouter.ai/api/v1/chat/completions"
+openrouter_api_key = json_data["deepseek"]
+
 
 def encode_image(image_path):
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
 
 # for mistral ai and gpt-4o
-def start_classification_apis(model_id, api_key, api_url, image_path, ad_creative_bodies, page_name):
+def start_classification_apis(model_id, api_key, api_url, image_path, outdoor, ad_creative_bodies = None, page_name = None):
     print(f'======== Labeling image: {image_path}. ========\n')
     
     headers = {
@@ -71,7 +83,7 @@ def start_classification_apis(model_id, api_key, api_url, image_path, ad_creativ
     base64_image = encode_image(image_path)
     image_url = f"data:image/jpeg;base64,{base64_image}"
     user_content = []
-    messages = [{"role": "system", "content": instructions_1 if model_id == "gpt-4o" else instructions_new}]
+    messages = [{"role": "system", "content": get_instructions_api(model_id, outdoor)}] # get the instructions based on the model and outdoor flag
 
     if model_id == "gpt-4o":
         # shuffle the order of the questions
@@ -84,18 +96,22 @@ def start_classification_apis(model_id, api_key, api_url, image_path, ad_creativ
         # add speculation
         shuffled_questions.extend(speculation)
 
+        if outdoor:
+            shuffled_questions.extend(brand)
+
         user_content = [{"type": "text", "text": q[0] + ": " + q[1]} for q in shuffled_questions]
         user_content.append({"type": "image_url", "image_url": {"url": image_url}}) # for gpt-4o
         
     else:
-        user_content = create_user_content()
+        user_content = create_user_content(outdoor)
         user_content.append({"type": "image_url", "image_url": image_url}) # for mistral
     
     # add other user content (page name, caption)
-    user_content.extend([
-        {"type": "text", "text": f"Name of the page running the ad: {page_name}"},
-        {"type": "text", "text": f"Ad caption: {ad_creative_bodies}"}
-    ])
+    if not outdoor:
+        user_content.extend([
+            {"type": "text", "text": f"Name of the page running the ad: {page_name}"},
+            {"type": "text", "text": f"Ad caption: {ad_creative_bodies}"}
+        ])
 
     messages.append({"role": "user", "content": user_content})
 
@@ -122,7 +138,7 @@ def start_classification_apis(model_id, api_key, api_url, image_path, ad_creativ
 
 
 # =============== Transformers ===============
-login(hugg_key) # log into hugging face (gated models)
+#login(hugg_key) # log into hugging face (gated models)
 
 def initiate_transformers_model(model_id):
     """Load the right model and processor based on model_id."""
@@ -207,7 +223,7 @@ def start_classification_trns(model, processor, model_id, image_path, ad_creativ
     return response, response_time
 
 
-def label_images(images, captions, model_id, api_key=None, api_url=None):
+def label_images(images, captions, model_id, api_key=None, api_url=None, outdoor=False):
     model, processor = None, None # define them first, in case we don't need them (for apis)
     
     if model_id not in API_MODELS: # transformers models
@@ -227,19 +243,23 @@ def label_images(images, captions, model_id, api_key=None, api_url=None):
         #image_url = f"data:image/jpeg;base64,{base64_image}"
 
         ad_id = AD_PATTERN.findall(image)[0][0]
-        ad_creative_bodies = captions[captions["img_id"] == ad_id]["ad_creative_bodies"].values
-        page_name = captions[captions["img_id"] == ad_id]["page_name"].values[0]
-        
-        # check if ad_creative_bodies exists and is not NaN
-        if len(ad_creative_bodies) == 0 or pd.isna(ad_creative_bodies):
-            ad_creative_bodies = "AD TEXT NOT AVAILABLE"
-        else:
-            ad_creative_bodies = ad_creative_bodies[0]
+        if not outdoor:
+            ad_creative_bodies = captions[captions["img_id"] == ad_id]["ad_creative_bodies"].values
+            page_name = captions[captions["img_id"] == ad_id]["page_name"].values[0]
+            
+            # check if ad_creative_bodies exists and is not NaN
+            if len(ad_creative_bodies) == 0 or pd.isna(ad_creative_bodies):
+                ad_creative_bodies = "AD TEXT NOT AVAILABLE"
+            else:
+                ad_creative_bodies = ad_creative_bodies[0]
 
         try:
             # check if we're using an API model
             if model_id in API_MODELS:
-                response, response_time = start_classification_apis(model_id, api_key, api_url, image_path, ad_creative_bodies, page_name)
+                if outdoor:
+                    response, response_time = start_classification_apis(model_id, api_key, api_url, image_path, outdoor)
+                else:
+                    response, response_time = start_classification_apis(model_id, api_key, api_url, image_path, outdoor, ad_creative_bodies, page_name)
                 response = response.json()['choices'][0]['message']['content']
                 #answer_dict = {match[0].strip(): (match[1].strip(), match[2].strip()) for match in pattern_api.findall(answers)}
             else:  # if it's a local transformer model
@@ -247,8 +267,8 @@ def label_images(images, captions, model_id, api_key=None, api_url=None):
             
             responses.append(response)
 
-            answer_dict = process_missing_output(response, expected_labels)
-            dict_entry = get_final_dict_entry(answer_dict, ad_id)
+            answer_dict = process_missing_output(response, expected_labels if not outdoor else expected_labels + ['BRAND'], outdoor)
+            dict_entry = get_final_dict_entry(answer_dict, ad_id, outdoor)
             dict_entry.update({"response_time": round(response_time, 2)})
         except Exception as e:
             print(f"Error processing image {image} due to: {e}.")
@@ -272,31 +292,32 @@ def label_images(images, captions, model_id, api_key=None, api_url=None):
 
 # start from here
 # read the ads data
-ads_data = pd.read_excel("persistent/AI_validation/validation results/digital_coding_clean.xlsx")
-coded_ads2 = pd.read_excel("persistent/AI_validation/validation results/gpu/pixtral_20250501_130435.xlsx")
-coded_ads = pd.read_excel("persistent/AI_validation/validation results/gpu/pixtral_all.xlsx")
+ads_data = pd.read_excel("data/outdoor ads/dieticians_outdoor_all_wide.xlsx")
+#coded_ads2 = pd.read_excel("validation results/gpu/pixtral_20250501_130435.xlsx")
+#coded_ads = pd.read_excel("gpu outputs/pixtral_all_1000.xlsx")
 
 #uncoded_images_sample = ((coded_ads[~coded_ads['img_id'].isin(uncoded_ads['img_id'])]['img_id']).astype(str) + ".png").tolist()
 #len(uncoded_images_sample)
-coded_images = (coded_ads["img_id"].astype(str) + ".png").tolist() # code the same 50 images
-coded_images2 = (coded_ads2["img_id"].astype(str) + ".png").tolist()
-all_coded_images = set(coded_images) | set(coded_images2) 
+#coded_images = (coded_ads["img_id"].astype(str) + ".png").tolist() # code the same 50 images
+#coded_images2 = (coded_ads2["img_id"].astype(str) + ".png").tolist()
+#all_coded_images = set(coded_images) | set(coded_images2) 
 
-uncoded_images_sample = [img for img in images if img not in all_coded_images]
+#uncoded_images_sample = [img for img in images if img not in all_coded_images]
 # randomly sample
-uncoded_images = random.sample(uncoded_images_sample, 200)
+uncoded_images = images[0:20]
 
-img_names = [os.path.splitext(image)[0] for image in uncoded_images] # change all_image_ids to sampled_images
-captions = ads_data[ads_data["img_id"].isin(img_names)][["img_id", "ad_creative_bodies", "page_name"]]
+#img_names = [os.path.splitext(image)[0] for image in uncoded_images] # change all_image_ids to sampled_images
+#captions = ads_data[ads_data["img_id"].isin(img_names)][["img_id", "ad_creative_bodies", "page_name"]]
+ad_ids = ads_data[ads_data["img_id"].isin(uncoded_images)][["img_id"]] # for outdoor ads
 
-labeling_outputs, responses = label_images(uncoded_images, captions, model_id=mistral_model_id, api_key=mistral_api_key, api_url=mistral_api_url)
+#labeling_outputs, responses = label_images(uncoded_images, captions, model_id=llama_model_id, api_key=openrouter_api_key, api_url=openrouter_api_url)
+labeling_outputs, responses = label_images(uncoded_images, ad_ids, model_id=mistral_model_id, api_key=mistral_api_key, api_url=mistral_api_url, outdoor=True)
 #labeling_outputs, responses = label_images(uncoded_images, captions, model_id=TEXT_MODELS[0])
 
 from datetime import datetime
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") # for the filename
 filename = f"pixtral_{timestamp}.xlsx"
-labeling_outputs.to_excel(f"persistent/AI_validation/validation results/gpu/{filename}", index=False)
-
+labeling_outputs.to_excel(f"data/outdoor ads/ais/{filename}", index=False)
 
 
 # best models
