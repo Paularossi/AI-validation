@@ -601,3 +601,23 @@ find_text_col <- function(human_base, rater_col, humans_names) {
   if (length(hits) == 0) return(NULL)
   hits[1]
 }
+
+
+# get reference level for each question to factor levels for the FE regression
+get_reference_level <- function(question) {
+  if (question == "new_type_ad") {
+    "9"
+  } else if (question == "target_group") {
+    "3"
+  } else if (question == "alcohol") {
+    "0"
+  } else if (question == "who_cat_clean") {
+    "NA"
+  } else if (question == "prem_offer") {
+    "0"
+  } else if (question == "marketing_str") {
+    "0"
+  } else {
+    NA_character_
+  }
+}

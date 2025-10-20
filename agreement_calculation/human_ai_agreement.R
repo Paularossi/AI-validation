@@ -821,12 +821,12 @@ plot_df %>%
     geom_tile(color = "white") +
     geom_text(aes(label = paste(round(pct, 2), " (", n, ")", sep="")), size = 4) +
     scale_fill_gradient2(
-      low = "darkgreen", mid = "yellow", high = "red", midpoint = 0.5, limits = c(0, 1))+
+      low = "darkgreen", mid = "yellow", high = "red", midpoint = 0.5, limits = c(0, 1)) +
     labs(title = "Missed Consensus Labels by Model and Label (WHO Categories)",
          x = "Model", y = "Label Code", fill = "% Missed") +
     theme_minimal()
 
-ggsave(paste(root_folder, "plots/ai_missed_who_cat.png", sep=""), width = 10, height = 6)
+ggsave(paste(root_folder, "plots/ai_missed_who_cat.png", sep = ""), width = 10, height = 6)
 
 # need to remove the "Other" labels in prem offers and marketing str
 
@@ -1022,48 +1022,7 @@ res_ml_delta %>%
          kripp_alpha_masi_nl, kripp_alpha_masi_fr,
          delta_masi, z, p_value, p_bonf)
 
-
-
-# ======== MONTE-CARLO SIMULATION
-
-
-
-# run 1000 simulations for GPT and Diet1–3 vs. consensus
-n_iter <- 1000
-results <- map_dfr(1:n_iter, function(i) {
-  tibble(
-    iter = i,
-    gpt   = bootstrap_agreement(df, "gpt_labels", "diet_cons", "gwet"),
-    diet1 = bootstrap_agreement(df, "diet1_labels", "diet_cons", "gwet"),
-    diet2 = bootstrap_agreement(df, "diet2_labels", "diet_cons", "gwet"),
-    diet3 = bootstrap_agreement(df, "diet3_labels", "diet_cons", "gwet")
-  )
-})
-
-# check exchangeability
-results <- results %>%
-  rowwise() %>%
-  mutate(gpt_in_range = between(gpt, min(c(diet1, diet2, diet3)), max(c(diet1, diet2, diet3))))
-
-mean(results$gpt_in_range)  # % of times GPT is "within human range"
-
-
-
-
-
-
-
-
-
-
-
-ggsave(paste(root_folder, "plots/ai_missed_who_cat.png", sep=""), width = 10, height = 6)
-
 # need to remove the "Other" labels in prem offers and marketing str
-
-
-table(gpt$new_type_ad, responses_dieticians$new_type_ad_dietcons)
-
 
 
 
@@ -1189,10 +1148,3 @@ res_ml_delta %>%
     facet_wrap(~question, scales = "free_y")
 
 ggsave(paste(root_folder, "plots/delta_multiple.png", sep=""), width = 11, height = 4)
-
-
-
-
-
-
-

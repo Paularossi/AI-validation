@@ -8,7 +8,7 @@ library(openxlsx)
 library(readxl)
 
 # only need the merge_ai_human_column function
-source("agreement_calculation/agreement_functions.R")
+source("C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/agreement_calculation/agreement_functions.R")
 
 root_folder <- "C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/gpu outputs/"
 responses_human_all <- read_excel(paste(root_folder, "responses_human_final.xlsx", sep = "")) %>% arrange(img_id)
@@ -18,6 +18,8 @@ gemma <- read_excel(paste(root_folder, "gemma_all_1000.xlsx", sep = "")) %>% arr
 gpt <- read_excel(paste(root_folder, "gpt_all_1000.xlsx", sep = "")) %>% arrange(img_id)
 pixtral <- read_excel(paste(root_folder, "pixtral_all_1000.xlsx", sep = "")) %>% arrange(img_id)
 qwen <- read_excel(paste(root_folder, "qwen_all_1000.xlsx", sep = "")) %>% arrange(img_id)
+
+models_list <- list(Gemma = gemma, Pixtral = pixtral, GPT = gpt, Qwen = qwen)
 
 # define the scorer function (agreement for single vs. multi choice)
 scorer <- function(predictions, consensus, task_type) {
@@ -148,7 +150,7 @@ bootstrap_agreement <- function(models, humans, column, dieticians, B = 1000, ta
   )
 }
 
-# plot the distribution of gwet coefficients for dieticians and model 
+# plot the distribution of gwet coefficients for dieticians and model
 plot_gwet_distribution <- function(sims, question) {
 
   sims_long <- sims %>%
@@ -214,47 +216,178 @@ plot_jacc_distribution <- function(sims, question) {
   #ggsave("jacc_distribution.png", width = 8, height = 6)
 }
 
-
-# SINGLE-CHOICE QUESTIONS
-results_single <- lapply(single_choice_vars, function(question) {
-  print(paste("Processing question:", question))
-  bootstrap_agreement(models = list(GPT = gpt), responses_human_all, question, responses_dieticians, 1000, "single")
-})
-
-names(results_single) <- single_choice_vars
-
-wb <- createWorkbook()
-for (question in names(results_single)) {
-  addWorksheet(wb, question)
-  writeData(wb, question, results_single[[question]]$sims)
+# helper function to get nice question labels
+get_question_label <- function(question) {
+  case_when(
+    question == "alcohol" ~ "Alcohol",
+    question == "new_type_ad" ~ "Ad Type",
+    question == "target_group" ~ "Target Group",
+    question == "prem_offer" ~ "Premium Offers",
+    question == "marketing_str" ~ "Marketing Strategies",
+    question == "who_cat_clean" ~ "WHO Categories",
+    TRUE ~ question
+  )
 }
-saveWorkbook(wb, "gpu outputs/plots/bootstrap_agreement_single_choice.xlsx", overwrite = TRUE)
 
-plot_gwet_distribution(results_single$alcohol$sims, "Alcohol")
-plot_prop_distribution(results_single$alcohol$sims, "Alcohol")
+# plot the gwet distributions for all three single-choice questions
+plot_all_gwet_distributions <- function(results_list, question_names) {
+  # combine all results into one dataframe with question labels
+  all_sims <- lapply(seq_along(question_names), function(i) {
+    question <- question_names[i]
+    results_list[[question]] %>%
+      select(iter, diet1_gwet, diet2_gwet, diet3_gwet, model_gwet, in_range) %>%
+      mutate(question = question)
+  }) %>%
+    bind_rows()
 
+  # calculate % in_range for each question
+  pct_in_range <- all_sims %>%
+    group_by(question) %>%
+    summarise(pct = mean(in_range, na.rm = TRUE) * 100) %>%
+    mutate(
+      question_label = get_question_label(question),
+      facet_title = paste0(question_label, "\nGPT in range: ", sprintf("%.1f", pct), "%")
+    )
 
-# run one by one because it takes a while
-# temp3 <- bootstrap_agreement(models, responses_human_all, "who_cat_clean", responses_dieticians, 1000, "multi")
-# results_multi <- list(temp, temp2, temp3)
+  # pivot longer for plotting
+  sims_long <- all_sims %>%
+    pivot_longer(cols = c(diet1_gwet, diet2_gwet, diet3_gwet, model_gwet),
+                 names_to = "rater", values_to = "gwet") %>%
+    mutate(
+      rater = factor(rater,
+                     levels = c("diet1_gwet", "diet2_gwet", "diet3_gwet", "model_gwet"),
+                     labels = c("Dietician 1", "Dietician 2", "Dietician 3", "GPT"))
+    )
+  # Join facet titles
+  sims_long <- sims_long %>%
+    left_join(pct_in_range %>% select(question, facet_title), by = "question")
 
-# MULTI-CHOICE QUESTIONS
-results_multi <- lapply(multi_label_vars, function(question) {
-  print(paste("Processing question:", question))
-  bootstrap_agreement(models = list(GPT = gpt), responses_human_all, question, responses_dieticians, 1000, "multi")
-})
+  p <- ggplot(sims_long, aes(x = gwet, fill = rater)) +
+    geom_density(alpha = 0.5) +
+    facet_wrap(~ facet_title, scales = "free_y", ncol = 1) +
+    labs(title = "Bootstrap Distribution of Gwet's AC1 Coefficients (B=1000)",
+         x = "Gwet's AC1",
+         y = "Density",
+         fill = "Rater") +
+    theme_minimal() +
+    theme(legend.position = "bottom")
 
-names(results_multi) <- multi_label_vars
+  ggsave("monte_carlo_single_vars.jpg", width = 8, height = 6)
 
-wb <- createWorkbook()
-for (question in names(results_multi)) {
-  addWorksheet(wb, question)
-  writeData(wb, question, results_multi[[question]]$sims)
+  invisible(p)
 }
-saveWorkbook(wb, "gpu outputs/plots/bootstrap_agreement_multi_choice.xlsx", overwrite = TRUE)
 
-plot_masi_distribution(results_multi$prem_offer$sims, "Premium Offers")
-plot_jacc_distribution(results_multi$prem_offer$sims, "Premium Offers")
+# plot the masi distributions for all three multi-label questions
+plot_all_masi_distributions <- function(results_list, question_names) {
+  # combine all results into one dataframe with question labels
+  all_sims <- lapply(seq_along(question_names), function(i) {
+    question <- question_names[i]
+    results_list[[question]] %>%
+      select(iter, diet1_masi, diet2_masi, diet3_masi, model_masi, in_range) %>%
+      mutate(question = question)
+  }) %>%
+    bind_rows()
+
+  filter(all_sims, question == "marketing_str")
+
+  # calculate % in_range for each question
+  pct_in_range <- all_sims %>%
+    group_by(question) %>%
+    summarise(pct = mean(in_range, na.rm = TRUE) * 100) %>%
+    mutate(
+      question_label = get_question_label(question),
+      facet_title = paste0(question_label, "\nGPT in range: ", sprintf("%.1f", pct), "%")
+    )
+
+  # pivot longer for plotting
+  sims_long <- all_sims %>%
+    pivot_longer(cols = c(diet1_masi, diet2_masi, diet3_masi, model_masi),
+                 names_to = "rater", values_to = "masi") %>%
+    mutate(
+      rater = factor(rater,
+                     levels = c("diet1_masi", "diet2_masi", "diet3_masi", "model_masi"),
+                     labels = c("Dietician 1", "Dietician 2", "Dietician 3", "GPT"))
+    )
+
+  sims_long <- sims_long %>%
+    left_join(pct_in_range %>% select(question, facet_title), by = "question")
+
+  p <- ggplot(sims_long, aes(x = masi, fill = rater)) +
+    geom_density(alpha = 0.5) +
+    facet_wrap(~ facet_title, scales = "free_y", ncol = 1) +
+    labs(title = "Bootstrap Distribution of Krippendorff's Alpha Coefficients (B=1000)",
+         x = "Krippendorff's Alpha",
+         y = "Density",
+         fill = "Rater") +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+
+  ggsave("monte_carlo_multi_vars.jpg", width = 8, height = 6)
+
+  invisible(p)
+}
+
+# combined plot for both single-choice and multi-label distributions in one figure
+plot_combined_distributions <- function(results_single, single_vars, results_multi, multi_vars) {
+  library(patchwork)
+
+  p1 <- plot_all_gwet_distributions(results_single, single_vars)
+  p2 <- plot_all_masi_distributions(results_multi, multi_vars)
+
+  p1 <- p1 + labs(title = "Single-Choice: Gwet's AC1")
+  p2 <- p2 + labs(title = "Multi-Label: Krippendorff's Alpha")
+
+  # combine plots side-by-side with shared legend
+  combined <- p1 + p2 +
+    plot_layout(guides = "collect") &
+    theme(legend.position = "bottom")
+
+  ggsave("monte_carlo_combined.png", plot = combined, width = 14, height = 6)
+
+  combined
+}
+
+
+# # SINGLE-CHOICE QUESTIONS
+# results_single <- lapply(single_choice_vars, function(question) {
+#   print(paste("Processing question:", question))
+#   bootstrap_agreement(models = list(GPT = gpt), responses_human_all, question, responses_dieticians, 1000, "single")
+# })
+
+# names(results_single) <- single_choice_vars
+
+# wb <- createWorkbook()
+# for (question in names(results_single)) {
+#   addWorksheet(wb, question)
+#   writeData(wb, question, results_single[[question]]$sims)
+# }
+# saveWorkbook(wb, "gpu outputs/plots/bootstrap_agreement_single_choice.xlsx", overwrite = TRUE)
+
+# plot_gwet_distribution(results_single$alcohol$sims, "Alcohol")
+# plot_prop_distribution(results_single$alcohol$sims, "Alcohol")
+
+
+# # run one by one because it takes a while
+# temp3 <- bootstrap_agreement(models = list(GPT = gpt), responses_human_all, "marketing_str", responses_dieticians, 1000, "multi")
+# # results_multi <- list(temp, temp2, temp3)
+
+# # MULTI-CHOICE QUESTIONS
+# results_multi <- lapply(multi_label_vars, function(question) {
+#   print(paste("Processing question:", question))
+#   bootstrap_agreement(models = list(GPT = gpt), responses_human_all, question, responses_dieticians, 1000, "multi")
+# })
+
+# names(results_multi) <- multi_label_vars
+
+# wb <- createWorkbook()
+# for (question in names(results_multi)) {
+#   addWorksheet(wb, question)
+#   writeData(wb, question, results_multi[[question]])
+# }
+# saveWorkbook(wb, "gpu outputs/plots/bootstrap_agreement_multi_choice.xlsx", overwrite = TRUE)
+
+# plot_masi_distribution(results_multi$prem_offer$sims, "Premium Offers")
+# plot_jacc_distribution(results_multi$prem_offer$sims, "Premium Offers")
 
 
 # read all results single and multi from the excel files (for later use)
@@ -266,8 +399,18 @@ results_multi <- setNames(lapply(multi_label_vars, function(question) {
   read_excel(path = file.path(root_folder, "plots", "bootstrap_agreement_multi_choice.xlsx"), sheet = question)
 }), multi_label_vars)
 
+# replot
+plot_gwet_distribution(results_single$alcohol, "Alcohol")
+plot_prop_distribution(results_single$alcohol, "Alcohol")
 
+plot_masi_distribution(results_multi$prem_offer, "Premium Offers")
+plot_jacc_distribution(results_multi$prem_offer, "Premium Offers")
 
+# plot all three single-choice gwet distributions in one figure
+plot_all_gwet_distributions(results_single, single_choice_vars)
+plot_all_masi_distributions(results_multi, multi_label_vars)
+
+plot_combined_distributions(results_single, single_choice_vars, results_multi, multi_label_vars)
 
 
 
@@ -317,7 +460,6 @@ build_panel_from_annotations <- function(models_list, dieticians_df) {
 }
 
 # ======== Build panel from original annotations and run FE regression ========
-models_list <- list(Gemma = gemma, Pixtral = pixtral, GPT = gpt, Qwen = qwen)
 
 # build the ad x question x model panel
 panel <- build_panel_from_annotations(models_list, responses_dieticians)
@@ -325,66 +467,434 @@ cat("Panel rows:", nrow(panel), "\n")
 
 # convert categorical variables to factors
 panel <- panel %>% mutate(
-  question = as.factor(question),
+  question = relevel(as.factor(question), ref = "alcohol"),
   question_type = as.factor(question_type),
-  model = as.factor(model)
+  model = as.factor(model),
+  model = relevel(model, ref = "GPT")
 )
+
+panel <- panel %>% arrange(img_id)
 
 
 # fixed effects regression with clustering using fixest
 library(fixest)
 library(broom)
-# 1. FE with ad fixed effects (img_id)
-fe_ad <- feols(score ~ model * question + model * question_type | img_id, data = panel)
 
-# clustered SEs by question
+# ======== Test Different Fixed Effects Specifications ========
+
+# 1. FE with ad fixed effects (img_id) - controls for ad-level heterogeneity
+fe_ad <- feols(score ~ model * question | img_id, data = panel)
 summary(fe_ad, cluster = ~ question)
 
+# 2. FE with question fixed effects - controls for question difficulty
+fe_question <- feols(score ~ model | question, data = panel)
+summary(fe_question, cluster = ~ question)
+
+# 3. FE with model fixed effects - controls for overall model performance
+fe_model <- feols(score ~ question | model, data = panel)
+summary(fe_model, cluster = ~ question)
+
+# 4. No fixed effects (simple linear regression) - for comparison
+lm_fit <- lm(score ~ model * question, data = panel)
+summary(lm_fit)
+
+
+
+# get the coefficients with confidence intervals
 coefs_with <- tidy(fe_ad, conf.int = TRUE)
+print(coefs_with, n = Inf)
 
-# 2. FE without ad fixed effects
-fe_no_ad <- feols(score ~ model * question + model * question_type, data = panel)
-summary(fe_no_ad, cluster = ~ question)
 
-coefs_no <- tidy(fe_no_ad, conf.int = TRUE)
+# ======== VISUALIZATIONS FOR MODEL COMPARISON ========
 
-# predicted mean scores per model x question_type
-# group-level summaries (observed means)
-summary_table <- panel %>%
-  group_by(model, question_type) %>%
-  summarise(
-    n = n(),
-    mean_score = mean(score, na.rm = TRUE),
-    sd_score = sd(score, na.rm = TRUE),
-    se = sd_score / sqrt(n),
-    ci_low = mean_score - 1.96 * se,
-    ci_high = mean_score + 1.96 * se
-  ) %>%
-  ungroup()
+# model performance differences from GPT (reference)
+coef_plot_data <- coefs_with %>%
+  filter(grepl("^model", term)) %>%
+  mutate(
+    model = case_when(
+      grepl("Gemma", term) ~ "Gemma",
+      grepl("Pixtral", term) ~ "Pixtral",
+      grepl("Qwen", term) ~ "Qwen",
+      TRUE ~ "Other"
+    ),
+    question = case_when(
+      grepl("alcohol", term) ~ "Alcohol (baseline)",
+      grepl("marketing_str", term) ~ "Marketing Strategies",
+      grepl("new_type_ad", term) ~ "Ad Type",
+      grepl("prem_offer", term) ~ "Premium Offers",
+      grepl("target_group", term) ~ "Target Group",
+      grepl("who_cat_clean", term) ~ "WHO Categories",
+      TRUE ~ "Overall"
+    ),
+    sig = p.value < 0.05
+  )
 
-ggplot(summary_table, aes(x = model, y = mean_score, color = question_type)) +
-  geom_point(position = position_dodge(width = 0.5), size = 3) +
-  geom_errorbar(aes(ymin = ci_low, ymax = ci_high), width = 0.2,
-                position = position_dodge(width = 0.5)) +
+ggplot(coef_plot_data, aes(x = estimate, y = question, color = model, shape = sig)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_point(size = 3, position = position_dodge(width = 0.5)) +
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2,
+                 position = position_dodge(width = 0.5)) +
+  scale_shape_manual(values = c(1, 16), labels = c("Not sig.", "p < 0.05")) +
+  labs(title = "Model Performance Relative to GPT (Ad FE)",
+       x = "Coefficient Estimate (difference from GPT)",
+       y = "Question",
+       color = "Model",
+       shape = "Significance") +
   theme_minimal() +
-  labs(y = "Mean agreement score", title = "Average agreement by model and question_type")
+  theme(legend.position = "bottom")
 
-# interaction plots (model x question_type) to visually check heterogeneity
-ggplot(summary_table, aes(x = question_type, y = mean_score, fill = model)) +
-  geom_col(position = position_dodge()) +
-  geom_errorbar(aes(ymin = ci_low, ymax = ci_high), position = position_dodge(width = 0.9), width = 0.2) +
-  theme_minimal() +
-  labs(title = "Model x Question type interaction (observed means)")
+ggsave("model_1_coeff.jpg", width = 10, height = 6)
 
 
 
 
+# ======== OPTION BIAS WITHIN EACH QUESTION (label-wise) ========
+# quantify for each question and label how much each model over/under-selects an option relative to human consensus. 
+# positive bias -> model selects the label more often than humans (over-flag), negative -> under-flag.
+
+# split a multi-label string into a set
+split_labels <- function(x) {
+  if (is.na(x) || x == "") return(character(0))
+  # split by comma (with or without space after it)
+  labs <- unlist(strsplit(as.character(x), ",\\s*"))
+  # trim whitespace and remove empty strings
+  labs <- trimws(labs)
+  labs[nzchar(labs)]
+}
+
+# get the set of labels for a question from human consensus and model outputs
+collect_label_set <- function(question, models_list, dieticians_df) {
+
+  diet_col <- paste0(question, "_dietcons")
+  ai_col <- ai_mapping[[question]]
+  # from humans
+  human_vals <- dieticians_df[[diet_col]]
+  # from models (concatenate across models)
+  model_vals <- unlist(lapply(models_list, function(df) df[[ai_col]]))
+  vals <- unique(c(human_vals, model_vals))
+  vals <- vals[!is.na(vals)]
+
+  if (question %in% multi_label_vars) {
+    # split all multi-label strings and get unique individual labels
+    all_labels <- unlist(lapply(vals, split_labels))
+    sort(unique(all_labels))
+  } else {
+    sort(unique(as.character(vals)))
+  }
+}
+
+# compute bias table for one question
+compute_option_bias <- function(question, models_list, dieticians_df) {
+  diet_col <- paste0(question, "_dietcons")
+  ai_col <- ai_mapping[[question]]
+  labels <- collect_label_set(question, models_list, dieticians_df)
+
+  out <- list()
+  for (m_name in names(models_list)) {
+    mdl <- models_list[[m_name]]
+    # join on img_id to align - use character column names with sym()
+    df <- mdl %>% 
+      select(img_id, model_pred = !!sym(ai_col)) %>%
+      inner_join(
+        dieticians_df %>% select(img_id, diet_cons = !!sym(diet_col)), 
+        by = "img_id"
+      )
+
+    # for each label, compute bias = mean(1[model selects] - 1[consensus selects])
+    for (lab in labels) {
+      if (question %in% multi_label_vars) {
+        y_hat <- vapply(df$model_pred, function(s) lab %in% split_labels(s), logical(1))
+        y_true <- vapply(df$diet_cons, function(s) lab %in% split_labels(s), logical(1))
+      } else {
+        y_hat <- as.character(df$model_pred) == lab
+        y_true <- as.character(df$diet_cons) == lab
+      }
+      d <- as.numeric(y_hat) - as.numeric(y_true)
+      n <- sum(!is.na(d))
+      est <- mean(d, na.rm = TRUE)
+      se <- sd(d, na.rm = TRUE) / sqrt(n)
+      z <- ifelse(se > 0, est / se, NA_real_)
+      p <- ifelse(is.na(z), NA_real_, 2 * pnorm(abs(z), lower.tail = FALSE))
+      ci_low <- est - 1.96 * se
+      ci_high <- est + 1.96 * se
+      out[[length(out) + 1]] <- tibble(
+        question = question,
+        label = lab,
+        model = m_name,
+        bias = est,
+        se = se,
+        conf.low = ci_low,
+        conf.high = ci_high,
+        p.value = p,
+        n = n
+      )
+    }
+  }
+  bind_rows(out)
+}
 
 
-# using plm
-library(plm)
-panel_plm <- pdata.frame(panel, index = c("img_id"))
-plm_fit <- plm(score ~ model * question + model * question_type,
-               data = panel_plm, model = "within", effect = "individual")
-summary(plm_fit)
-fixef(plm_fit)
+# compute and plot option bias for all questions
+for (q in c(single_choice_vars, multi_label_vars)) {
+  bt <- compute_option_bias(q, models_list, responses_dieticians)
+
+  q_label <- get_question_label(q)
+  print(paste("Plotting option bias for question:", q_label))
+  bt <- bt %>%
+    mutate(sig = case_when(
+      is.na(p.value) ~ "",
+      p.value < 0.001 ~ "***",
+      p.value < 0.01 ~ "**",
+      p.value < 0.05 ~ "*",
+      TRUE ~ ""
+    ))
+  print(paste("number of rows in bt:", nrow(bt)))
+
+  p <- ggplot(bt, aes(x = model, y = label, fill = bias)) +
+    geom_tile(color = "white") +
+    geom_text(aes(label = paste0(sprintf("%.2f", bias), sig)), color = "white") +
+    scale_fill_gradient2(low = "#d73027", mid = "#fee08b", high = "#1a9850",
+                         midpoint = 0, name = "Bias\n(model - human)") +
+    labs(title = paste("Option bias by model -", q_label),
+         subtitle = "Positive = over-select vs. humans; Negative = under-select",
+         x = "Model", y = "Label") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+  fn_base <- paste0("option_bias_", q, ".jpg")
+  ggsave(fn_base, plot = p, width = 10, height = 8)
+  #readr::write_csv(bt, paste0("option_bias_", q, ".csv"))
+}
+
+
+
+# ======== LABEL-LEVEL FE REGRESSION ========
+# panel: ad xd model x label, with label fixed effects that control for label difficulty
+
+# build label-level panel for one question
+build_label_panel <- function(question, models_list, dieticians_df) {
+  diet_col_name <- paste0(question, "_dietcons")
+  ai_col_name <- as.character(ai_mapping[[question]])
+  labels <- collect_label_set(question, models_list, dieticians_df)
+
+  out <- list()
+
+  # get human consensus data for joining
+  human_data <- dieticians_df %>% 
+    select(img_id, human_pred = !!sym(diet_col_name))
+
+  for (m_name in names(models_list)) {
+    df <- models_list[[m_name]] %>%
+      select(img_id, model_pred = !!sym(ai_col_name)) %>%
+      inner_join(human_data, by = "img_id")
+
+    # for each label, create binary indicators for model AND human
+    for (lab in labels) {
+      if (question %in% multi_label_vars) {
+        df_lab <- df %>%
+          mutate(
+            model_selected = vapply(model_pred,
+                                    function(s) lab %in% split_labels(s),
+                                    logical(1)),
+            human_selected = vapply(human_pred,
+                                    function(s) lab %in% split_labels(s),
+                                    logical(1)),
+            # compute difference model - human (the bias measure)
+            selected_diff = as.numeric(model_selected) - as.numeric(human_selected),
+            label = lab,
+            model = m_name,
+            question = question
+          )
+      } else {
+        df_lab <- df %>%
+          mutate(
+            model_selected = as.character(model_pred) == lab,
+            human_selected = as.character(human_pred) == lab,
+            selected_diff = as.numeric(model_selected) - as.numeric(human_selected),
+            label = lab,
+            model = m_name,
+            question = question
+          )
+      }
+      out[[length(out) + 1]] <- df_lab %>%
+        select(img_id, model, question, label, model_selected, human_selected, selected_diff)
+    }
+  }
+
+  bind_rows(out)
+}
+
+# run label-level FE regression for one question
+label_fe_regression <- function(question, models_list, dieticians_df) {
+  panel <- build_label_panel(question, models_list, dieticians_df)
+  panel <- panel %>% filter(label != "-1")
+
+  # set correct reference levels for factors
+  ref_label <- get_reference_level(question)
+  # convert to factors with GPT as reference
+  panel <- panel %>%
+    mutate(
+      model = relevel(as.factor(model), ref = "GPT"),
+      label = relevel(as.factor(label), ref = ref_label)
+    )
+
+  # FE regression with label fixed effects
+  # DV: selected_diff = model selection - human selection (ranges from -1 to +1)
+  # coefficient = average bias difference relative to GPT, controlling for label base rate
+  fit_gpt <- feols(selected_diff ~ label | img_id, data = panel %>% filter(model == "GPT"))
+  fit_qwen <- feols(selected_diff ~ label | img_id, data = panel %>% filter(model == "Qwen"))
+  fit_pixtral <- feols(selected_diff ~ label | img_id, data = panel %>% filter(model == "Pixtral"))
+  fit_gemma <- feols(selected_diff ~ label | img_id, data = panel %>% filter(model == "Gemma"))
+  fe_fit_ad <- feols(selected_diff ~ model * label | img_id, data = panel, cluster = ~label)
+
+  list(
+    fit_gpt = fit_gpt,
+    fit_qwen = fit_qwen,
+    fit_pixtral = fit_pixtral,
+    fit_gemma = fit_gemma,
+    fit_ad = fe_fit_ad,
+    panel = panel,
+    question = question
+  )
+}
+
+# visualize label FE results
+
+# plot label FE with actual label names, grouped by model
+plot_label_fe_by_model <- function(fe_result) {
+  # get label names from label_df (loaded in agreement_functions.R)
+  coefs <- tidy(fe_result$fit_ad, conf.int = TRUE)
+
+  q_label <- get_question_label(fe_result$question)
+
+  # parse model and label from interaction terms (e.g., "modelGemma:label2" -> model="Gemma", label="2")
+  coef_parsed <- coefs %>%
+    filter(grepl("model.*:label", term)) %>%
+    mutate(
+      model = gsub("model([^:]+):label.*", "\\1", term),
+      label = gsub(".*:label(.+)$", "\\1", term)
+    ) %>% # join with label names from label_df
+    left_join(
+      label_df %>% 
+        filter(category == fe_result$question) %>%
+        select(code, text_label),
+      by = c("label" = "code")
+    ) %>%
+    mutate(
+      # use text_label if available, otherwise use code
+      label_name = ifelse(is.na(text_label), label, text_label),
+      sig = p.value < 0.05
+    )
+
+  # show all labels with FE coefficients by model
+  p <- ggplot(coef_parsed, aes(x = estimate, y = reorder(label_name, estimate))) +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+    geom_point(aes(color = sig, shape = sig), size = 3) +
+    geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
+                   height = 0.3) +
+    facet_wrap(~ model, ncol = 3) +
+    scale_color_manual(values = c("gray60", "firebrick"),
+                       labels = c("Not sig.", "p < 0.05"),
+                       name = "") +
+    scale_shape_manual(values = c(1, 16),
+                       labels = c("Not sig.", "p < 0.05"),
+                       name = "") +
+    labs(
+      title = paste("Label-level bias by model -", q_label),
+      subtitle = "FE regression coefficients (model:label interactions, controlling for ad FE)",
+      x = "Coefficient estimate (difference from GPT x label baseline)",
+      y = "Label"
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = "bottom",
+      strip.text = element_text(face = "bold", size = 11),
+      panel.spacing = unit(1, "lines")
+    )
+
+  fn <- paste0("label_fe_by_model_", fe_result$question, ".jpg")
+  ggsave(fn, plot = p, width = 12, height = max(8, nrow(coef_parsed) / 4))
+
+  list(plot = p, data = coef_parsed)
+}
+
+# heatmap FE coefficients
+plot_label_fe_heatmap <- function(fe_result) {
+  # combine label-level coefficients from all individual model regressions
+  model_fits <- list(
+    GPT = fe_result$fit_gpt,
+    Qwen = fe_result$fit_qwen,
+    Pixtral = fe_result$fit_pixtral,
+    Gemma = fe_result$fit_gemma
+  )
+
+  # determine the reference label from the factor levels
+  ref_label <- levels(fe_result$panel$label)[1]
+
+  # non-intercept (differences vs. reference) coefficients
+  coef_list <- lapply(names(model_fits), function(m) {
+    tidy(model_fits[[m]], conf.int = TRUE) %>%
+      filter(term != "(Intercept)") %>%
+      mutate(
+        model = m,
+        label = gsub("label", "", term),
+        is_reference = FALSE
+      )
+  })
+
+  all_coefs <- bind_rows(coef_list)
+
+  # join with label names
+  all_coefs <- all_coefs %>%
+    left_join(
+      label_df %>%
+        filter(category == fe_result$question) %>%
+        select(code, text_label),
+      by = c("label" = "code")
+    ) %>%
+    mutate(
+      label_name = ifelse(is.na(text_label), label, text_label),
+      label_name = ifelse(is_reference, paste0(label_name, " (Reference)"), label_name),
+      sig = case_when(
+        p.value < 0.001 ~ "***",
+        p.value < 0.01 ~ "**",
+        p.value < 0.05 ~ "*",
+        TRUE ~ ""
+      )
+    )
+
+  q_label <- get_question_label(fe_result$question)
+
+  p <- ggplot(all_coefs, aes(x = model, y = reorder(label_name, estimate), fill = estimate)) +
+    geom_tile(color = "white") +
+    geom_text(aes(label = paste0(sprintf("%.2f", estimate), sig)),
+              color = "black", size = 3) +
+    scale_fill_gradient2(
+      low = "#d73027", mid = "white", high = "red",
+      midpoint = 0,
+      name = "Bias\n(model - human)"
+    ) +
+    labs(
+      title = paste("Label-level bias heatmap by model -", q_label),
+      subtitle = "FE regression coefficients (per model, controlling for ad FE)",
+      x = "Model",
+      y = "Label"
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+      axis.text.y = element_text(size = 8),
+      plot.title = element_text(size = 11),
+      plot.subtitle = element_text(size = 9)
+    )
+
+  fn <- paste0("label_fe_heatmap_allmodels_", fe_result$question, ".jpg")
+  ggsave(fn, plot = p, width = 7, height = 6)
+  list(plot = p, data = all_coefs)
+}
+
+# run for one question
+fe_result <- label_fe_regression("who_cat_clean", models_list, responses_dieticians)
+summary(fe_result$fit_gpt)
+#result <- plot_label_fe_by_model(fe_result)
+result_heatmap <- plot_label_fe_heatmap(fe_result)
