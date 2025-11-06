@@ -2,9 +2,10 @@
 library(readxl)
 library(writexl)
 
-source("C:/Users/P70090005/Desktop/phd/AI-validation/agreement_calculation/agreement_functions.R")
+source("C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/agreement_calculation/agreement_functions.R")
 
-root_folder <- "C:/Users/P70090005/Desktop/phd/AI-validation/data/outdoor ads/"
+root_folder <- "C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/data/outdoor ads/"
+plot_folder <- paste(root_folder, "plots/", sep="")
 responses_diet_all <- read_excel(paste(root_folder, "dieticians_outdoor_all_final.xlsx", sep="")) %>%
   mutate(img_id = gsub("\\.jpg$", "", img_id)) %>% arrange(img_id)
 gpt <- read_excel(paste(root_folder, "gpt_all_outdoor.xlsx", sep="")) %>% arrange(img_id)
@@ -13,55 +14,10 @@ gpt <- read_excel(paste(root_folder, "gpt_all_outdoor.xlsx", sep="")) %>% arrang
 gpt <- gpt %>%
   mutate(brand = map_chr(brand, clean_brand))
 
-models <- list(gpt = gpt)
+models <- list(GPT = gpt)
 
 
 # ===== SINGLE CHOICE =====
-results_kappa <- compare_human_ai_kappa(responses_diet_all, models)
-#results_kappa <- compare_human_ai_kappa(responses_human_all, models, ai_mapping, human_mapping)
-head(results_kappa)
-
-# unnest the conf int for gwet
-results_kappa <- results_kappa %>%
-  mutate(gwet_ci_low = as.numeric(sub("\\(([^,]+),.*", "\\1", gwet_ci)),
-         gwet_ci_upp = as.numeric(sub(".*,(.+)\\)", "\\1", gwet_ci))) 
-
-# pivot to long format for plotting
-plot_df <- results_kappa %>%
-  mutate(rater = sub("^.+_(diet[1-3]|dietcons)$", "\\1", coder),
-         rater = recode(rater,
-                        diet1 = "Dietician 1", diet2 = "Dietician 2", diet3 = "Dietician 3",
-                        dietcons = "Consensus (D)")) %>%
-  pivot_longer(
-    cols = c(prop_agreement, kappa, gwet_coeff),
-    names_to = "metric",
-    values_to = "value"
-  ) %>%
-  mutate(metric = recode(metric, prop_agreement = "% Agreement", kappa = "Cohen's Kappa", 
-                         gwet_coeff = "Gwet's AC1"))
-
-
-ggplot(plot_df, aes(x = model, y = rater, fill = value)) +
-  geom_tile(color = "white") +
-  geom_text(aes(label = round(value, 2)), size = 3) +
-  facet_grid(metric ~ question, scales = "free", space = "free_x") +
-  scale_fill_gradient2(
-    low = "red", mid = "yellow", high = "darkgreen",
-    midpoint = 0.5, limits = c(0, 1), name = "Agreement"
-  ) +
-  labs(
-    title = "AI vs. Human Single-Choice Agreement",
-    x = "AI Model", y = "Human Rater"
-  ) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    strip.text.y = element_text(angle = -90),
-    panel.spacing = unit(0.5, "lines")
-  )
-
-ggsave(paste(root_folder, "plots/diet_ai_single.png", sep=""), width = 9, height = 5)
-
 
 # all together
 comparison_df <- compare_all_raters(responses_diet_all, models)
@@ -101,7 +57,7 @@ plot_df_symmetric %>%
     midpoint = 0.5, limits = c(0, 1), name = "Agreement"
   ) +
   labs(
-    title = "Agreement Across All Raters (Single-Choice)",
+    title = "Agreement Across All Raters (Single-Option)",
     x = "Rater 1", y = "Rater 2"
   ) +
   theme_minimal(base_size = 12) +
@@ -111,13 +67,13 @@ plot_df_symmetric %>%
     panel.spacing = unit(0.5, "lines")
   )
 
-ggsave(paste(root_folder, "plots/everything_single.png", sep=""), width = 10, height = 5)
+ggsave(paste(root_folder, "plots/everything_single_out.jpg", sep=""), width = 8, height = 5)
 
 
 
 # ====== MULTI-LABEL COLUMNS ======
 res_ml <- compare_multilabel_human_ai(responses_diet_all, models, consensus = FALSE,
-                                      multi_label_vars = multi_label_vars)
+                                      multi_label_vars = multi_label_vars, filter_other = TRUE)
 
 plot_df_ml <- res_ml %>%
   select(-kripp_alpha_unweighted) %>%
@@ -154,7 +110,7 @@ ggplot(plot_df_sym, aes(x = rater1, y = rater2, fill = value)) +
     midpoint = 0.5, limits = c(0, 1), name = "Agreement"
   ) +
   labs(
-    title = "Agreement Across All Raters (Multi-Label)",
+    title = "Agreement Across All Raters (Multi-Option)",
     x = "Rater 1", y = "Rater 2"
   ) +
   theme_minimal(base_size = 12) +
@@ -164,7 +120,7 @@ ggplot(plot_df_sym, aes(x = rater1, y = rater2, fill = value)) +
     panel.spacing = unit(0.5, "lines")
   )
 
-ggsave(paste(root_folder, "plots/everything_multiple.png", sep=""), width = 10, height = 5)
+ggsave(paste(root_folder, "plots/everything_multiple.jpg", sep=""), width = 8, height = 5)
 
 
 
@@ -188,15 +144,7 @@ plot_df <- disagreed_by_label_single %>%
     names_to = c("model", ".value"),
     names_pattern = "failed_(.*)_(n|pct)"
   ) %>%
-  mutate(
-    model = recode(model,
-                   gpt = "GPT",
-                   qwen = "Qwen",
-                   pixtral = "Pixtral",
-                   gemma = "Gemma",
-                   all = "All Models")
-  ) %>%
-  mutate(text_label_n = paste0(text_label, " (", total, ")")) %>% 
+  mutate(text_label_n = paste0(text_label, " (", total, ")")) %>%
   filter(model %!in% c("all_n", "all_pct"))
 
 plot_df %>%
@@ -231,12 +179,6 @@ plot_df <- disagreed_by_label_multiple %>%
     names_pattern = "failed_(.*)_(n|pct)"
   ) %>%
   mutate(
-    model = recode(model,
-                   gpt = "GPT",
-                   qwen = "Qwen",
-                   pixtral = "Pixtral",
-                   gemma = "Gemma",
-                   all = "All Models"),
     text_label_n = paste0(text_label, " (", total, ")")
   )
 
@@ -284,8 +226,6 @@ df_brand <-  df_brand %>%
 # all raters together
 agreement_brand <- compare_multilabel_human_ai(df_brand, models, consensus = FALSE, multi_label_vars = c("brand"))
 
-cbind(df_brand, gpt$brand)
-
 plot_df_ml <- agreement_brand %>%
   select(-kripp_alpha_unweighted) %>%
   pivot_longer(cols = c(jaccard, kripp_alpha_binary, kripp_alpha_masi), 
@@ -300,8 +240,8 @@ plot_df_ml <- agreement_brand %>%
                     diet1 = "Dietician 1", diet2 = "Dietician 2", diet3 = "Dietician 3",
                     dietcons = "Consensus (D)", .default = rater2),
     metric = recode(metric, jaccard = "Jaccard Similarity",
-                    kripp_alpha_binary = "Kripp. α (Binary)",
-                    kripp_alpha_masi = "Kripp. α (MASI)")
+                    kripp_alpha_binary = "Krippendorff's α (Binary)",
+                    kripp_alpha_masi = "Krippendorff's α (MASI)")
   )
 
 
@@ -309,11 +249,12 @@ plot_df_sym <- plot_df_ml %>%
   bind_rows(
     plot_df_ml %>%
       rename(rater1 = rater2, rater2 = rater1)
-  )
+  ) %>% 
+  filter(metric != "Krippendorff's α (Binary)")
 
 ggplot(plot_df_sym, aes(x = rater1, y = rater2, fill = value)) +
   geom_tile(color = "white") +
-  geom_text(aes(label = round(value, 2)), size = 2.7) +
+  geom_text(aes(label = round(value, 2)), size = 2.8) +
   facet_grid(metric ~ ., scales = "free", space = "free_x") +
   scale_fill_gradient2(
     low = "red", mid = "yellow", high = "darkgreen",
@@ -330,16 +271,115 @@ ggplot(plot_df_sym, aes(x = rater1, y = rater2, fill = value)) +
     panel.spacing = unit(0.5, "lines")
   )
 
-ggsave(paste(root_folder, "plots/everything_brand.png", sep=""), width = 8, height = 6)
+ggsave(paste(root_folder, "plots/brand.jpg", sep=""), width = 6, height = 5)
 
+# ======== OPTION BIAS WITHIN EACH QUESTION (z-tests) + LABEL-LEVEL FIXED EFFECTS REGRESSION ========
+source("C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/agreement_calculation/agreement_functions.R")
+source("C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/agreement_calculation/monte_regr.R")
+library(patchwork)
+# compute and plot option bias for all questions
+for (q in c(single_choice_vars, multi_label_vars)) {
+  q_label <- get_question_label(q)
+  print(paste("Calculating option bias for question:", q_label))
+  bt <- compute_option_bias(q, models, responses_diet_all)
+  fe_result <- label_fe_regression(q, models, responses_diet_all, outdoor = TRUE)
+  
+  # get FE result data first to align label ordering
+  fe_heatmap_result <- plot_label_fe_heatmap(fe_result, save = FALSE, outdoor = TRUE)
+  fe_data <- fe_heatmap_result$data
+  
+  # get the exact label order from FE heatmap (which includes reference at top)
+  fe_label_levels <- levels(fe_data$label_name)
+  
+  # get reference label info
+  ref_label_code <- get_reference_level(q)
+  ref_label_name <- label_df %>%
+    filter(category == q, code == ref_label_code) %>%
+    pull(text_label)
+  
+  bt <- bt %>%
+    left_join(
+      label_df %>% # join with label names from label_df
+        filter(category == q) %>%
+        select(code, text_label),
+      by = c("label" = "code")
+    ) %>%
+    mutate(sig = case_when(
+      is.na(p.value) ~ "",
+      p.value < 0.001 ~ "***",
+      p.value < 0.01 ~ "**",
+      p.value < 0.05 ~ "*",
+      TRUE ~ ""
+      ),
+      # use text_label if available, otherwise use code
+      label_name = ifelse(is.na(text_label), label, text_label))
+  
+  expected_labels <- label_df %>%
+    filter(category == fe_result$question) %>%
+    pull(text_label)
+  missing_labels <- if (fe_result$question == "alcohol") 0 else setdiff(expected_labels, unique(bt$label_name))
+  
+  # add missing labels with NA estimates
+  if (length(missing_labels) > 0) {
+    for (lbl in missing_labels) {
+      bt <- bt %>%
+        add_row(model = rep(unique(bt$model), each = 1),
+                label = lbl,
+                bias = NA,
+                p.value = NA,
+                sig = "",
+                label_name = lbl)
+    }
+  }
 
+  # use the same y-axis ordering as FE heatmap for alignment
+  bt <- bt %>%
+    mutate(label_name = factor(label_name, levels = fe_label_levels))
 
-disagreed_by_label_multiple <- multi_disagreement_by_label(models = list(gpt = gpt), 
-                                    column = "brand", dieticians = df_brand)
+  # calculate combined range for both plots to ensure same legend
+  all_values <- c(bt$bias, fe_data$estimate)
+  value_range <- range(all_values, na.rm = TRUE)
 
+  p1 <- ggplot(bt, aes(x = model, y = label_name, fill = bias)) +
+    geom_tile(color = "white") +
+    geom_text(aes(label = paste0(sprintf("%.2f", bias), sig)), color = "black", size = 3) +
+    scale_fill_gradient2(low = "#d73027", mid = "white", high = "red",
+                         midpoint = 0, name = "Bias",
+                         limits = value_range) +
+    labs(subtitle = "Option bias (z-test)",
+         x = "Model", y = "Label") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+          axis.text.y = element_text(size = 8))
 
+  p2 <- fe_heatmap_result$plot +
+    labs(subtitle = paste("FE regression (relative to reference: ", ref_label_name, ")", sep = ""),
+         title = NULL, x = "Model", y = NULL) +
+    scale_fill_gradient2(low = "#d73027", mid = "white", high = "red",
+                         midpoint = 0, name = "Bias",
+                         limits = value_range) +
+    theme(axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.title.y = element_blank())
+  
+  combined <- (p1 | p2) +
+    plot_layout(widths = c(1.2, 1), guides = "collect") +
+    plot_annotation(
+      title = paste("Label-level bias:", get_question_label(q)),
+      tag_levels = 'A'
+    ) &
+    theme(plot.tag = element_text(face = 'bold', size = 10),
+          legend.position = "right")
 
+  fn_combined <- paste0("bias_", q, "_out.jpg")
+  # custom size for who_cat_clean
+  sizes <- if (q %in% c("who_cat_clean")) {
+    list(width = 7, height = 5)
+  } else {
+    list(width = 6, height = 3)
+  }
+  ggsave(paste(plot_folder, fn_combined, sep = ""), plot = combined, width = sizes$width, height = sizes$height, dpi = 350)
+  #readr::write_csv(bt, paste0("option_bias_", q, ".csv"))
+}
 
-
-
-
+# fix alcohol

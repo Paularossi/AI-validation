@@ -602,6 +602,18 @@ find_text_col <- function(human_base, rater_col, humans_names) {
   hits[1]
 }
 
+# helper function to get nice question labels
+get_question_label <- function(question) {
+  case_when(
+    question == "alcohol" ~ "Alcohol",
+    question == "new_type_ad" ~ "Ad Type",
+    question == "target_group" ~ "Target Group",
+    question == "prem_offer" ~ "Premium Offers",
+    question == "marketing_str" ~ "Marketing Strategies",
+    question == "who_cat_clean" ~ "WHO Categories",
+    TRUE ~ question
+  )
+}
 
 # get reference level for each question to factor levels for the FE regression
 get_reference_level <- function(question) {
@@ -620,4 +632,19 @@ get_reference_level <- function(question) {
   } else {
     NA_character_
   }
+}
+
+# convert 95% CI to SE: SE = (upper - lower) / (2 * 1.96)
+ci_to_se <- function(lower, upper) {
+  if (is.na(lower) || is.na(upper)) return(NA_real_)
+  (upper - lower) / (2 * 1.96)
+}
+
+# row-wise z-test for difference in independent estimates
+z_test_from_ests <- function(est1, se1, est2, se2) {
+  if (any(is.na(c(est1, se1, est2, se2)))) return(c(z = NA_real_, p = NA_real_))
+  z <- (est1 - est2) / sqrt(se1^2 + se2^2)
+  p <- 2 * (1 - pnorm(abs(z)))
+  p_bonf <-  p.adjust(p, method = "bonferroni")
+  c(z = z, p = p, p_bonf = p_bonf)
 }
