@@ -311,13 +311,3 @@ responses_final <- responses_long %>%
 df_final <- cbind(img_id = ads$img_id, responses_final)
 
 write_xlsx(df_final, paste(root_folder2, "dieticians_outdoor_all_wide.xlsx", sep=""))
-
-
-
-
-
-
-
-
-
-

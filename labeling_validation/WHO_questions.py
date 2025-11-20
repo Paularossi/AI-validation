@@ -62,8 +62,6 @@ type_ad = [ # make it clear that this question is about the company running the 
     ("INFANT_FORMULA", "Is the ad promoting infant formula, follow-up, or growing-up milks? (e.g. an ad for Enfamil or Aptamil) ")
 ]
 
-# licensed characters are owned by a specific company, change cartoons to mention "not licensed chars"
-
 marketing_str = [
     ("OWNED_CARTOON", "Are there characters specifically created/owned by a company to represent its brand, often used in advertising and product packaging? These characters help establish brand identity and engage with consumers, especially children (e.g., M&Ms, Dino from the Dino brand) "),
     ("LICENSED_CHARACTER", "Are there well-known characters from TV shows or books that a brand pays to use in its promotions? These characters attract fans and enhance the appeal of products through their existing popularity (e.g., Miffy (Nijntje), Mickey Mouse) "),
@@ -123,15 +121,6 @@ who_cat = [
     ("NS", "Is the product category in the ad non-specified or unclear? ")
 ]
 
-# adapt this to classify for all foods selected in the ad
-# processed = [
-#     ("NA_PROCESSING", "This set of questions is about the level of food processing in the image. Answer each question with Yes/No. Does the image not depict any food or beverage and the processing level is therefore non-applicable? "),
-#     ("UNPROCESSED", "Does the food belong to unprocessed or minimally processed food and is not alcohol? (e.g. fresh fruits, whole grains, eggs, fresh meat) "),
-#     ("PROCESSED", "Does the food belong to processed food and is not alcohol? (e.g. canned vegetables, cheeses, smoked meats, bread) "),
-#     ("ULTRA_PROCESSED", "Does the food belong to ultra-processed food and is not alcohol? (e.g. chips, candy, instant noodles, soft drinks, fast-food) "),
-#     ("INGREDIENTS", "Does the food represent processed culinary ingredients and is not alcohol? (e.g. sugar, vegetable oils, butter, salt) ")
-# ]
-
 alcohol = [
     ("ALCOHOL", "Can you see the presence of alcoholic drinks or alcoholic brands in the ad? (e.g. items like beer, wine, etc., or brands like Jupiler, Heineken, etc.)")
 ]
@@ -140,10 +129,6 @@ alcohol = [
 speculation = [
     ("SPECULATION_LEVEL", "Final question. Based on the ad's image and text, rate on a scale from 0 to 10 how much you had to speculate or guess your answers rather than rely on directly observable information. (0 means every answer is fully supported by the ad; 10 means answers required extensive inference.) Provide a brief explanation of your rating.")
 ]
-
-# brand
-# in the text or image of this ad, do you see a brand? which one? (the page running the ad is not always in the content)
-# which one do we care about? the owner of the ad or the brand in the ad?
 
 instructions_new = (
     #"You will be provided with a picture of an online advertisement delivered to Belgium/Netherlands, its corresponding text (which may be in English, French, or Dutch), and the name of the company running the ad. "

@@ -9,7 +9,6 @@ plot_folder <- paste(root_folder, "plots/", sep="")
 responses_diet_all <- read_excel(paste(root_folder, "dieticians_outdoor_all_final.xlsx", sep="")) %>%
   mutate(img_id = gsub("\\.jpg$", "", img_id)) %>% arrange(img_id)
 gpt <- read_excel(paste(root_folder, "gpt_all_outdoor.xlsx", sep="")) %>% arrange(img_id)
-#pixtral <- read_excel(paste(root_folder, "pixtral_all_1000.xlsx", sep=""))
 
 gpt <- gpt %>%
   mutate(brand = map_chr(brand, clean_brand))
@@ -381,5 +380,3 @@ for (q in c(single_choice_vars, multi_label_vars)) {
   ggsave(paste(plot_folder, fn_combined, sep = ""), plot = combined, width = sizes$width, height = sizes$height, dpi = 350)
   #readr::write_csv(bt, paste0("option_bias_", q, ".csv"))
 }
-
-# fix alcohol

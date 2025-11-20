@@ -150,7 +150,6 @@ plot_gwet_distribution <- function(sims, question) {
          x = "Gwet's AC1",
          y = "Density") +
     theme_minimal()
-  # save as png
   #ggsave(paste(plot_folder, "gwet_distribution.jpg", sep = ""), width = 8, height = 6)
 }
 
@@ -167,7 +166,6 @@ plot_prop_distribution <- function(sims, question) {
          x = "Proportion Agreement",
          y = "Density") +
     theme_minimal()
-  # save as png
   #ggsave(paste(plot_folder, "prop_distribution.jpg", sep = ""), width = 8, height = 6)
 }
 
@@ -183,7 +181,6 @@ plot_masi_distribution <- function(sims, question) {
          x = "MASI Coefficient",
          y = "Density") +
     theme_minimal()
-  # save as png
   #ggsave(paste(plot_folder, "masi_distribution.jpg", sep = ""), width = 8, height = 6)
 }
 
@@ -199,7 +196,6 @@ plot_jacc_distribution <- function(sims, question) {
          x = "Jaccard Similarity",
          y = "Density") +
     theme_minimal()
-  # save as png
   #ggsave(paste(plot_folder, "jacc_distribution.jpg", sep = ""), width = 8, height = 6)
 }
 
@@ -654,134 +650,3 @@ plot_label_fe_heatmap <- function(fe_result, save = TRUE, outdoor = FALSE) {
     ggsave(fn, plot = p, width = 6, height = 5)
   list(plot = p, data = all_coefs)
 }
-
-
-
-
-
-
-# # ======== FIXED EFFECTS LINEAR REGRESSION ========
-# # fixed effects: model, question (alcohol, prem_offer), question type (single, multi)
-# # interactions: model*question, model*question_type
-# # response: agreement metric (gwet for single, masi for multi)
-
-
-# # build ad x question x model panel from original annotations
-# build_panel_from_annotations <- function(models_list, dieticians_df) {
-#   out <- list()
-#   idx <- 1
-
-#   # helper to get human consensus column names used in agreement_functions.R
-#   for (question in c(single_choice_vars, multi_label_vars)) {
-#     question_type <- ifelse(question %in% single_choice_vars, "single", "multi")
-
-#     # dieticians consensus (agreement_functions defines mapping)
-#     diet_col <- paste0(question, "_dietcons")
-#     ai_column <- ai_mapping[[question]]
-
-#     for (model_name in names(models_list)) {
-#       model_df <- models_list[[model_name]]
-
-#       # align by img_id and join model predictions with dieticians consensus
-#       df <- model_df %>%
-#         select(img_id, !!sym(ai_column)) %>%
-#         rename(model_pred = !!sym(ai_column)) %>%
-#         inner_join(dieticians_df %>% select(img_id, !!sym(diet_col)), by = "img_id") %>%
-#         rename(diet_cons = !!sym(diet_col))
-
-#       # compute per-ad agreement score
-#       if (question_type == "single") {
-#         df <- df %>% mutate(score = as.numeric(model_pred == diet_cons))
-#       } else {
-#         df <- df %>% mutate(score = mapply(function(a, b) jaccard_similarity(a, b), model_pred, diet_cons))
-#       }
-
-#       out[[idx]] <- df %>% mutate(question = question, question_type = question_type, model = model_name)
-#       idx <- idx + 1
-#     }
-#   }
-
-#   panel <- bind_rows(out)
-#   panel
-# }
-
-# # ======== Build panel from original annotations and run FE regression ========
-
-# # build the ad x question x model panel
-# panel <- build_panel_from_annotations(models_list, responses_dieticians)
-# cat("Panel rows:", nrow(panel), "\n")
-
-# # convert categorical variables to factors
-# panel <- panel %>% mutate(
-#   question = relevel(as.factor(question), ref = "alcohol"),
-#   question_type = as.factor(question_type),
-#   model = as.factor(model),
-#   model = relevel(model, ref = "GPT")
-# )
-
-# panel <- panel %>% arrange(img_id)
-
-# # ======== Test Different Fixed Effects Specifications ========
-
-# # 1. FE with ad fixed effects (img_id) - controls for ad-level heterogeneity
-# fe_ad <- feols(score ~ model * question | img_id, data = panel)
-# summary(fe_ad, cluster = ~ question)
-
-# # 2. FE with question fixed effects - controls for question difficulty
-# fe_question <- feols(score ~ model | question, data = panel)
-# summary(fe_question, cluster = ~ question)
-
-# # 3. FE with model fixed effects - controls for overall model performance
-# fe_model <- feols(score ~ question | model, data = panel)
-# summary(fe_model, cluster = ~ question)
-
-# # 4. No fixed effects (simple linear regression) - for comparison
-# lm_fit <- lm(score ~ model * question, data = panel)
-# summary(lm_fit)
-
-
-
-# # get the coefficients with confidence intervals
-# coefs_with <- tidy(fe_ad, conf.int = TRUE)
-# print(coefs_with, n = Inf)
-
-# # ======== VISUALIZATIONS FOR MODEL COMPARISON ========
-# # this is for the models that have GPT as reference. ignore this for now and do the model individual regressions
-
-# # model performance differences from GPT (reference)
-# coef_plot_data <- coefs_with %>%
-#   filter(grepl("^model", term)) %>%
-#   mutate(
-#     model = case_when(
-#       grepl("Gemma", term) ~ "Gemma",
-#       grepl("Pixtral", term) ~ "Pixtral",
-#       grepl("Qwen", term) ~ "Qwen",
-#       TRUE ~ "Other"
-#     ),
-#     question = case_when(
-#       grepl("alcohol", term) ~ "Alcohol (baseline)",
-#       grepl("marketing_str", term) ~ "Marketing Strategies",
-#       grepl("new_type_ad", term) ~ "Ad Type",
-#       grepl("prem_offer", term) ~ "Premium Offers",
-#       grepl("target_group", term) ~ "Target Group",
-#       grepl("who_cat_clean", term) ~ "WHO Categories",
-#       TRUE ~ "Overall"
-#     ),
-#     sig = p.value < 0.05
-#   )
-
-# ggplot(coef_plot_data, aes(x = estimate, y = question, color = model, shape = sig)) +
-#   geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
-#   geom_point(size = 3, position = position_dodge(width = 0.5)) +
-#   geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2,
-#                  position = position_dodge(width = 0.5)) +
-#   scale_shape_manual(values = c(1, 16), labels = c("Not sig.", "p < 0.05")) +
-#   labs(title = "Model Performance Relative to GPT (Ad FE)",
-#        x = "Coefficient Estimate (difference from GPT)",
-#        y = "Question",
-#        color = "Model",
-#        shape = "Significance") +
-#   theme_minimal() +
-#   theme(legend.position = "bottom")
-
-# ggsave("model_1_coeff.jpg", width = 10, height = 6)

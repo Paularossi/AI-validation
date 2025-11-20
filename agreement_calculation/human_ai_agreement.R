@@ -14,30 +14,14 @@ gpt <- read_excel(paste(root_folder, "gpt_all_1000.xlsx", sep=""))
 pixtral <- read_excel(paste(root_folder, "pixtral_all_1000.xlsx", sep=""))
 qwen <- read_excel(paste(root_folder, "qwen_all_1000.xlsx", sep=""))
 
-# to get the categories of the ads (snacks, drinks, etc)
-# the code below (for all models) is run only once
-# cats <- read_excel("C:/Users/P70090005/Desktop/phd/AI-validation/data/3000_ads_by_cat_language.xlsx")
-
-# qwen <- cats %>% select(c(img_id, language, category)) %>%
-#   right_join(qwen, by = "img_id")
-# write_xlsx(qwen, paste(root_folder, "qwen_all_1000.xlsx", sep=""))
-
-# responses_human_all$img_id <- gsub("\\.png$", "", responses_human_all$Image_ID)
-# responses_human_all <- cats %>% select(c(img_id, category, language)) %>%
-#   right_join(responses_human_all, by = "img_id")
-# write_xlsx(responses_human_all, paste(root_folder, "responses_human_final.xlsx", sep=""))
-
 # change to only use the images from dieticians
-gemma <- gemma %>%
-  filter(img_id %in% responses_dieticians$img_id) %>% arrange(img_id)
-gpt <- gpt %>%
-  filter(img_id %in% responses_dieticians$img_id) %>% arrange(img_id)
-pixtral <- pixtral %>%
-  filter(img_id %in% responses_dieticians$img_id) %>% arrange(img_id)
-qwen <- qwen %>%
-  filter(img_id %in% responses_dieticians$img_id) %>% arrange(img_id)
-
-# responses_human_all <- responses_human_all %>% 
+# gemma <- gemma %>%
+#   filter(img_id %in% responses_dieticians$img_id) %>% arrange(img_id)
+# gpt <- gpt %>%
+#   filter(img_id %in% responses_dieticians$img_id) %>% arrange(img_id)
+# pixtral <- pixtral %>%
+#   filter(img_id %in% responses_dieticians$img_id) %>% arrange(img_id)
+# qwen <- qwen %>%
 #   filter(img_id %in% responses_dieticians$img_id) %>% arrange(img_id)
 
 models <- list(Gemma = gemma, Pixtral = pixtral, GPT = gpt, Qwen = qwen)
@@ -305,8 +289,6 @@ plot_df %>%
     theme_minimal()
 
 ggsave(paste(plot_folder, "ai_missed_who_cat.png", sep = ""), width = 10, height = 6)
-
-# need to remove the "Other" labels in prem offers and marketing str
 
 
 
@@ -843,117 +825,3 @@ combined_bias_plot <- (p1_alc / p2_target / p3_type) +
           legend.position = "right")
 
 ggsave(paste(plot_folder, "bias_combined_single.jpg", sep = ""), plot = combined_bias_plot, width = 6, height = 7, dpi = 350)
-
-
-
-
-
-
-
-
-
-### OLDER STUFF BELOW
-
-# # ==============================================================================
-# # MORE ANALYSIS - by category of the brand
-# cats <- read_excel("C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/data/3000_ads_by_cat_language.xlsx")
-
-# responses_human_all <- cats %>%
-#   select(c(img_id, category, language)) %>%
-#   inner_join(responses_human_all, by = "img_id")
-
-# responses_dieticians <- cats %>%
-#   select(c(img_id, category, language)) %>%
-#   inner_join(responses_dieticians, by = "img_id")
-
-# table(responses_human_all$category)
-
-# # how consistent are AI models in different product categories?
-# category_agreement_single <- lapply(single_choice_vars, function(col) {
-#   df <- agreement_by_category_all(list(gpt = gpt, qwen = qwen), column=col, 
-#                                   responses_human_all, responses_dieticians)
-#   df$question <- col
-#   df
-# }) %>% bind_rows()
-
-# category_agreement_multiple <- lapply(multi_label_vars, function(col) {
-#   df <- agreement_by_category_all(list(gpt = gpt, qwen = qwen), column = col, 
-#                                   responses_human_all, responses_dieticians, multiple = TRUE)
-#   df$question <- col
-#   df
-# }) %>% bind_rows()
-
-# custom_colors <- c(
-#   "gpt_consensus" = "#00BFFF",
-#   "gpt_diet_consensus" = "#1C86EE",
-#   #"qwen_consensus" = "#1C86EE",
-#   "gpt_qwen" = "#EEC900"
-# )
-# table(category_agreement_single$model_pair)
-
-# # single choice
-# category_agreement_single %>%
-#   mutate(category_n = paste0(category, " (", n, ")")) %>%
-#   filter(model_pair %in% c("gpt_qwen", "gpt_consensus", "gpt_diet_consensus"),
-#          question == "new_type_ad") %>%
-#   ggplot(aes(x = category, y = gwet_coeff, fill = model_pair)) +
-#     geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
-#     geom_text(aes(label = round(gwet_coeff, 2)), 
-#               position = position_dodge(width = 0.9), vjust = 3.5, size = 2.5) +
-#     geom_errorbar(aes(ymin = gwet_ci_low, ymax = gwet_ci_upp),
-#                   width = 0.2, position = position_dodge(width = 0.9)) +
-#     scale_fill_manual(values = custom_colors) +
-#     #facet_wrap(~ question, scales = "free_x") +
-#     theme_minimal(base_size = 12) +
-#     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-#     labs(
-#       title = "Model Agreement by Brand Category - Ad Type",
-#       y = "Gwet's AC Agreement",
-#       x = "Brand Category"
-#     )
-
-# ggsave(paste(root_folder, "plots/brand_gwet_type_ad_single.png", sep=""), width = 10, height = 6)
-
-
-# # multi-label
-# multi_confint <- read_excel(paste(root_folder, "plots/agreement_multiple_all.xlsx", sep=""))
-
-# overall_alphas <- multi_confint %>%
-#   filter(question == "marketing_str", rater1 == "Consensus") %>%
-#   select(rater2, kripp_alpha_masi)
-# alpha_gpt <- overall_alphas %>% filter(rater2 == "gpt") %>% pull(kripp_alpha_masi)
-# alpha_qwen <- overall_alphas %>% filter(rater2 == "qwen") %>% pull(kripp_alpha_masi)
-
-
-# category_agreement_multiple %>%
-#   filter(model_pair %in% c("gpt_qwen", "gpt_consensus", "gpt_diet_consensus"),
-#          question == "marketing_str") %>%
-#   mutate(category_n = paste0(category, " (", n, ")")) %>%
-#   ggplot(aes(x = category, y = alpha_masi, fill = model_pair)) +
-#     geom_bar(stat = "identity", position = "dodge") +
-#     geom_text(aes(label = round(alpha_masi, 2)), 
-#               position = position_dodge(width = 0.9), vjust = -0.5, size = 2.5) +
-#     geom_errorbar(aes(ymin = alpha_ci_low, ymax = alpha_ci_upp),
-#                   width = 0.2, position = position_dodge(width = 0.9)) +
-#     scale_fill_manual(values = custom_colors) +
-#     annotate("text", x = Inf, y = Inf,
-#              label = paste0("GPT vs Consensus α = ", round(alpha_gpt, 2)),
-#              hjust = 1, vjust = 26, size = 4, fontface = "italic") +
-#     annotate("text", x = Inf, y = Inf,
-#              label = paste0("Qwen vs Consensus α = ", round(alpha_qwen, 2)),
-#              hjust = 1, vjust = 28, size = 4, fontface = "italic") +
-#     #facet_wrap(~ question, scales = "free_x") +
-#     theme_minimal(base_size = 12) +
-#     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-#     #ylim(-0.6, 1) +
-#     labs(
-#       title = "Model Agreement by Brand Category - Marketing Strategies",
-#       y = "Krippendorff's Alpha (MASI)",
-#       x = "Brand Category"
-#     ) 
-  
-
-# ggsave(paste(root_folder, "plots/brand_alpha_marketing_str.png", sep=""), width = 10, height = 6)
-
-# # find some categories to analyze more in detail, for ex. online ordering and sweet 
-# # biscuits have really low agreement for who_cat
