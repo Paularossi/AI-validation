@@ -188,12 +188,11 @@ temp = filtered_df.groupby('page_name').size().reset_index(name='count').sort_va
 
 
 # THE NEW 1000 ADS SAMPLE
-df = pd.read_excel("persistent/AI_validation/data/new_aws_1000.xlsx")
+df = pd.read_excel("data/new_aws_1000.xlsx")
 img_ids = df['img_id'].astype(str) + '.png'  # add .png to each id
 
-source_folder = 'persistent/AI_validation/data/unique_images'
-destination_folder = 'persistent/AI_validation/data/1000_images'
-
+source_folder = 'data/unique_images'
+destination_folder = 'data/1000_images'
 os.makedirs(destination_folder, exist_ok=True)
 
 for img_file in img_ids:
