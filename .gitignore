@@ -163,3 +163,4 @@ cython_debug/
 #.idea/
 AIValid.pem
 keys.txt
+literature/*
