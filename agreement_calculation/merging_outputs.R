@@ -4,7 +4,7 @@ library(dplyr)
 library(writexl)
 library(purrr)
 
-root_folder <- "C:/Users/P70090005/Desktop/phd/AI-validation/gpu outputs/"
+root_folder <- "C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/gpu outputs/"
 
 ###### START ANALYSIS HERE
 #original_labeling <- read_excel(paste(root_folder, "validation results/original_coding.xlsx", sep=""))
@@ -85,7 +85,7 @@ setdiff(pixtral_all$img_id, qwen_all$img_id)
 
 
 # outdoor ads
-root_folder <- "C:/Users/P70090005/Desktop/phd/AI-validation/data/outdoor ads/"
+root_folder <- "C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/data/outdoor cls/"
 
 gpt1 <- read_excel(paste(root_folder, "ais/gpt_20250802_194421.xlsx", sep=""))
 gpt2 <- read_excel(paste(root_folder, "ais/gpt_20250802_200341.xlsx", sep=""))
@@ -98,9 +98,9 @@ write_xlsx(gpt_all, paste(root_folder, "gpt_all.xlsx", sep=""))
 sum(gpt_all$response_time)/60
 
 
-pixtral1 <- read_excel(paste(root_folder, "ais/pixtral_20250803_133526.xlsx", sep=""))
-pixtral2 <- read_excel(paste(root_folder, "ais/", sep=""))
-pixtral3 <- read_excel(paste(root_folder, "ais/", sep=""))
+pixtral1 <- read_excel(paste(root_folder, "pixtral_20251227_183947.xlsx", sep=""))
+pixtral2 <- read_excel(paste(root_folder, "pixtral_20251227_190826.xlsx", sep=""))
+pixtral3 <- read_excel(paste(root_folder, "pixtral_20251230_170706.xlsx", sep=""))
 
 pixtral_all <- bind_rows(pixtral1, pixtral2, pixtral3)
 sum(duplicated(pixtral_all$img_id)) # check for duplicates
@@ -108,9 +108,20 @@ sum(duplicated(pixtral_all$img_id)) # check for duplicates
 write_xlsx(pixtral_all, paste(root_folder, "pixtral_all.xlsx", sep=""))
 sum(pixtral_all$response_time)/60
 
+
+gemma1 <- read_excel(paste(root_folder, "gemma12_20260101_122858.xlsx", sep=""))
+gemma2 <- read_excel(paste(root_folder, "gemma12_20260101_123441.xlsx", sep=""))
+gemma3 <- read_excel(paste(root_folder, "gemma12_20260101_123641.xlsx", sep=""))
+
+gemma_all <- bind_rows(gemma1, gemma2, gemma3)
+sum(duplicated(gemma_all$img_id)) # check for duplicates
+
+write_xlsx(gemma_all, paste(root_folder, "gemma_temp.xlsx", sep=""))
+sum(gemma_all$response_time)/60
+
 # =============================================================================
 # for ad distribution
-root_folder <- "C:/Users/P70090005/Documents/AI-validation/data/"
+root_folder <- "C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/data/"
 all_ads <- read_excel(paste(root_folder, "digital_coding_clean.xlsx", sep=""))
 ads_1000 <- read_excel(paste(root_folder, "new_aws_1000.xlsx", sep=""))
 languages <- read_excel(paste(root_folder, "language_flagging.xlsx", sep=""))
@@ -179,7 +190,7 @@ write.csv(diet, paste(root_folder, "dieticians_400_loop.csv", sep=""), row.names
 
 # =============================================================================
 # merge with previous data to get the url of the images
-root2 <- "//unimaas.nl/users/Employees/P70090005/data/Desktop/phd/ad libraries and brands/AI-validation/data/qualtrics survey - aws setup/"
+root2 <- "C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/data/qualtrics survey - aws setup/"
 previous <- read.csv(paste(root2, "images_old.csv", sep=""))
 
 new <- read_excel(paste(root2, "new_aws_1000.xlsx", sep=""))
@@ -214,7 +225,7 @@ write.csv(nl, paste(root2, "images_nl.csv", sep=""), row.names = FALSE)
 
 # =============================================================================
 ### ===== HELPER FUNCTIONS FOR ADJUSTING THE LABELS =====
-root_folder <- "C:/Users/P70090005/Desktop/phd/AI-validation/gpu outputs/"
+root_folder <- "C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/gpu outputs/"
 gemma <- read_excel(paste(root_folder, "gemma_all_1000.xlsx", sep=""))
 pixtral <- read_excel(paste(root_folder, "pixtral_all_1000.xlsx", sep=""))
 gpt <- read_excel(paste(root_folder, "gpt_all_1000.xlsx", sep=""))
@@ -268,7 +279,7 @@ write_xlsx(gpt_all, paste(root_folder, "gpt_all_outdoor.xlsx", sep=""))
 # =============================================================================
 ### ===== PROCESSING THE SURVEY DATA =====
 
-root_folder <- "C:/Users/P70090005/Desktop/phd/AI-validation/data/survey crowd/"
+root_folder <- "C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/data/survey crowd/"
 
 responses_dutch <- read.csv(paste(root_folder, "Dutch survey values.csv", sep=""))
 responses_french <- read.csv(paste(root_folder, "French survey values.csv", sep=""))
@@ -335,7 +346,7 @@ ggplot(responses_all, aes(x = language, y = Duration_minutes)) +
        y = "Duration (minutes)") +
   theme_minimal()
 
-ggsave("C:/Users/P70090005/Documents/AI-validation/gpu outputs/tt/survey_times.png", width = 9, height = 5)
+ggsave("C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/gpu outputs/tt/survey_times.png", width = 9, height = 5)
 
 # do a quick hypothesis test
 kruskal_test <- kruskal.test(Duration_minutes ~ language, data = responses_all)
@@ -533,8 +544,9 @@ write_xlsx(responses_wide_all, paste(root_folder, "responses_all_wide.xlsx", sep
 
 names(responses_wide_all)
 
+# =======================================================
 # build the consensus columns for single choice questions
-#responses_wide_all <- read_excel(paste(root_folder, "responses_human_final.xlsx", sep=""))
+responses_wide_all <- read_excel(paste(root_folder, "responses_human_final.xlsx", sep=""))
 
 responses_human_clean <- responses_wide_all %>%
   select(Image_ID)
@@ -560,49 +572,47 @@ for (var in single_choice_vars) {
     })
 }
 
-# for multi label columns take a mix of intersection/union
-multi_label_vars <- c("prem_offer", "marketing_str", "who_cat", "who_cat_clean")
+# ====== MULTI-OPTION COLUMNS CONSENSUS (OLD)
 
-
-multi_label_consensus_majority <- function(..., return_string = TRUE, threshold = 2, brand = TRUE) {
-  labels <- list(...)
-    
-  sets <- lapply(labels, function(x) {
-    # if (is.null(x) || is.na(x) || trimws(x) == "-" || trimws(x) == "") {
-    #   return(character(0))
-    # }
-    trimws(strsplit(as.character(x), ",")[[1]])
-  })
-  
-  sets <- sets[lengths(sets) > 0]
-  if (length(sets) == 0) return(if (return_string) "-" else character(0))
-  
-  # flatten all labels into one vector
-  all_labels <- unlist(sets, use.names = FALSE)
-  if (length(all_labels) == 0) return(if (return_string) "-" else character(0))
-  
-  # count frequency across coders
-  label_counts <- table(all_labels)
-  consensus <- names(label_counts[label_counts >= threshold])
-  
-  if (length(consensus) == 0) {
-    union_set <- Reduce(union, sets)
-    return(if (return_string) paste(sort(union_set), collapse = ",") else union_set)
-  }
-  #if (length(consensus) == 0) return(if (brand) "-" else names(label_counts)[which.max(label_counts)])
-  
-  consensus <- sort(consensus)
-  if (return_string) {
-    paste(consensus, collapse = ", ")
-  } else {
-    consensus
-  }
-}
+# multi_label_consensus_majority <- function(..., return_string = TRUE, threshold = 2, brand = TRUE) {
+#   labels <- list(...)
+#     
+#   sets <- lapply(labels, function(x) {
+#     # if (is.null(x) || is.na(x) || trimws(x) == "-" || trimws(x) == "") {
+#     #   return(character(0))
+#     # }
+#     trimws(strsplit(as.character(x), ",")[[1]])
+#   })
+#   
+#   sets <- sets[lengths(sets) > 0]
+#   if (length(sets) == 0) return(if (return_string) "-" else character(0))
+#   
+#   # flatten all labels into one vector
+#   all_labels <- unlist(sets, use.names = FALSE)
+#   if (length(all_labels) == 0) return(if (return_string) "-" else character(0))
+#   
+#   # count frequency across coders
+#   label_counts <- table(all_labels)
+#   consensus <- names(label_counts[label_counts >= threshold])
+#   
+#   if (length(consensus) == 0) {
+#     union_set <- Reduce(union, sets)
+#     return(if (return_string) paste(sort(union_set), collapse = ",") else union_set)
+#   }
+#   #if (length(consensus) == 0) return(if (brand) "-" else names(label_counts)[which.max(label_counts)])
+#   
+#   consensus <- sort(consensus)
+#   if (return_string) {
+#     paste(consensus, collapse = ", ")
+#   } else {
+#     consensus
+#   }
+# }
 
 responses_multi_clean <- responses_wide_all %>%
   select(Image_ID)
 
-# the new multi-label consensus still doesn't work.... 
+
 for (var in multi_label_vars) {
   
   coder_cols <- paste0(var, "_coder", 1:3)
@@ -634,5 +644,131 @@ responses_human_all <- responses_human_all %>%
 
 
 write_xlsx(responses_human_all, paste(root_folder, "responses_human_final.xlsx", sep=""))
+
+
+
+# ========= UPDATED CONSENSUS CALCULATION FOR MULTI-OPTION COLUMNS
+# Original consensus rule (baseline):
+# For multi-option variables, the original rule retains all labels selected by at least two of the three coders. 
+# When no label meets this majority threshold, the consensus is defined as the union of all labels selected by any coder. 
+# This fallback ensures that the consensus set is non-empty and preserves potentially relevant information in cases of complete disagreement.
+
+# Additional consensus rules introduced for sensitivity analysis
+# 1. Threshold-only (≥2 of 3, no fallback)
+# Labels selected by at least two coders are retained. If no label reaches this threshold, the consensus is set to empty. 
+# This isolates the effect of the union fallback in the original rule.
+
+# 2. Union-only
+# The consensus consists of the union of all labels selected by any coder, regardless of overlap. 
+# This maximizes inclusiveness and represents an upper bound on label aggregation.
+
+# 3. Intersection-only
+# The consensus consists of the intersection of labels selected by all three coders. 
+# This is the most conservative rule, retaining only unanimously agreed labels and often yielding empty sets.
+
+# 4. Unanimity (3 of 3)
+# Only labels selected by all three coders are retained, equivalent to a strict majority threshold without fallback. 
+# This provides a lower bound on consensus strictness.
+
+split_set <- function(x) {
+  # Treat "-", "", NA as empty set, otherwise split by comma
+  if (is.null(x) || is.na(x)) return(character(0))
+  x <- trimws(as.character(x))
+  if (x == "" || x == "-" ) return(character(0))
+  trimws(unlist(strsplit(x, ",")))
+}
+
+collapse_set <- function(x) {
+  x <- sort(unique(x))
+  if (length(x) == 0) "-" else paste(x, collapse = ", ")
+}
+
+cons_union <- function(a, b, c) {
+  sets <- list(split_set(a), split_set(b), split_set(c))
+  collapse_set(Reduce(union, sets))
+}
+
+cons_intersection <- function(a, b, c) {
+  sets <- list(split_set(a), split_set(b), split_set(c))
+  # intersection over non-empty coders, if all empty -> empty
+  if (all(lengths(sets) == 0)) return("-")
+  collapse_set(Reduce(intersect, sets))
+}
+
+cons_threshold <- function(a, b, c, threshold = 2, fallback = c("union", "empty")) {
+  fallback <- match.arg(fallback)
+  sets <- list(split_set(a), split_set(b), split_set(c))
+  
+  all_labels <- unlist(sets, use.names = FALSE)
+  if (length(all_labels) == 0) return("-")
+  
+  tab <- table(all_labels)
+  keep <- names(tab)[tab >= threshold]
+  
+  if (length(keep) > 0) return(collapse_set(keep))
+  
+  if (fallback == "union") {
+    return(collapse_set(Reduce(union, sets)))
+  } else {
+    return("-")  # explicit empty consensus if no label reaches threshold
+  }
+}
+
+df <- responses_wide_all
+df <- df %>% select(-all_of(old_cons_cols)) <- c("prem_offer", "marketing_str", "who_cat", "who_cat_clean")
+
+# ---- create new consensus columns ----
+for (v in multi_label_vars) {
+  ccols <- paste0(v, "_coder", 1:3)
+  stopifnot(all(ccols %in% names(df)))
+  
+  df[[paste0(v, "_cons_thr2_union")]] <- pmap_chr(df[ccols], ~ cons_threshold(..1, ..2, ..3, threshold = 2, fallback = "union")) # original one that we used
+  df[[paste0(v, "_cons_thr2_empty")]] <- pmap_chr(df[ccols], ~ cons_threshold(..1, ..2, ..3, threshold = 2, fallback = "empty"))
+  df[[paste0(v, "_cons_union")]]      <- pmap_chr(df[ccols], ~ cons_union(..1, ..2, ..3))
+  df[[paste0(v, "_cons_intersection")]] <- pmap_chr(df[ccols], ~ cons_intersection(..1, ..2, ..3))
+  #df[[paste0(v, "_cons_thr3")]]       <- pmap_chr(df[ccols], ~ cons_threshold(..1, ..2, ..3, threshold = 3, fallback = "empty"))
+}
+
+# remove old consensus columns
+old_cons_cols <- c("prem_offer_cons", "marketing_str_cons", "who_cat_cons", "who_cat_clean_cons")
+old_cons_cols <- old_cons_cols[old_cons_cols %in% names(df)]
+df <- df %>% select(-all_of(old_cons_cols))
+
+# ---- quantify how often the original fallback would trigger (threshold=2, fallback=union) ----
+fallback_summary <- map_dfr(multi_label_vars, function(v) {
+  ccols <- paste0(v, "_coder", 1:3)
+  stopifnot(all(ccols %in% names(df)))
+  
+  # fallback is used when threshold set is empty BUT union is non-empty
+  used_fallback <- pmap_lgl(df[ccols], function(...) {
+    vals <- list(...)
+    sets <- lapply(vals, split_set)
+    
+    all_labels <- unlist(sets, use.names = FALSE)
+    if (length(all_labels) == 0) return(FALSE)
+    
+    tab <- table(all_labels)
+    thr <- names(tab)[tab >= 2]
+    
+    (length(thr) == 0) && (length(Reduce(union, sets)) > 0)
+  })
+  
+  tibble(
+    question = v,
+    n = length(used_fallback),
+    n_fallback = sum(used_fallback),
+    pct_fallback = mean(used_fallback)
+  )
+})
+
+
+write_xlsx(
+  list(
+    responses_human_final_sens = df,
+    fallback_rates = fallback_summary
+  ), file.path(root_folder, "responses_human_final_sensitivity.xlsx")
+)
+
+
 
 # ================ DATA PROCESSING ENDS HERE ========================
