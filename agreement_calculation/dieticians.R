@@ -3,7 +3,7 @@ library(readxl)
 library(writexl)
 
 
-root_folder <- "C:/Users/P70090005/Desktop/phd/AI-validation/data/dieticians/"
+root_folder <- "C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/data/"
 
 diet1 <- read_excel(paste(root_folder, "dietician_1_dutch.xlsx", sep=""))
 diet23 <- read_excel(paste(root_folder, "dietician_2_3_french.xlsx", sep=""))
@@ -228,6 +228,110 @@ responses_dieticians_all <- responses_dieticians_all %>%
 
 # THIS IS THE MAIN DATAFRAME TO BASE THE ANALYSIS ON!!!
 write_xlsx(responses_dieticians_all, paste(root_folder, "dieticians_all_final.xlsx", sep=""))
+
+
+
+# ========= UPDATED CONSENSUS CALCULATION FOR MULTI-OPTION COLUMNS (from merging_outputs.R)
+df <- read_excel(paste(root_folder, "dieticians_all_final.xlsx", sep=""))
+
+split_set <- function(x) {
+  # treat "-", "", NA as empty set, otherwise split by comma
+  if (is.null(x) || is.na(x)) return(character(0))
+  x <- trimws(as.character(x))
+  if (x == "" || x == "-" ) return(character(0))
+  trimws(unlist(strsplit(x, ",")))
+}
+
+collapse_set <- function(x) {
+  x <- sort(unique(x))
+  if (length(x) == 0) "-" else paste(x, collapse = ", ")
+}
+
+cons_union <- function(a, b, c) {
+  sets <- list(split_set(a), split_set(b), split_set(c))
+  collapse_set(Reduce(union, sets))
+}
+
+cons_intersection <- function(a, b, c) {
+  sets <- list(split_set(a), split_set(b), split_set(c))
+  # intersection over non-empty coders, if all empty -> empty
+  if (all(lengths(sets) == 0)) return("-")
+  collapse_set(Reduce(intersect, sets))
+}
+
+cons_threshold <- function(a, b, c, threshold = 2, fallback = c("union", "empty")) {
+  fallback <- match.arg(fallback)
+  sets <- list(split_set(a), split_set(b), split_set(c))
+  
+  all_labels <- unlist(sets, use.names = FALSE)
+  if (length(all_labels) == 0) return("-")
+  
+  tab <- table(all_labels)
+  keep <- names(tab)[tab >= threshold]
+  
+  if (length(keep) > 0) return(collapse_set(keep))
+  
+  if (fallback == "union") {
+    return(collapse_set(Reduce(union, sets)))
+  } else {
+    return("-")  # explicit empty consensus if no label reaches threshold
+  }
+}
+
+
+# ---- create new consensus columns ----
+for (v in multi_label_vars) {
+  ccols <- paste0(v, "_diet", 1:3)
+  stopifnot(all(ccols %in% names(df)))
+  
+  df[[paste0(v, "_dietcons_thr2_union")]] <- pmap_chr(df[ccols], ~ cons_threshold(..1, ..2, ..3, threshold = 2, fallback = "union")) # original one that we used
+  df[[paste0(v, "_dietcons_thr2_empty")]] <- pmap_chr(df[ccols], ~ cons_threshold(..1, ..2, ..3, threshold = 2, fallback = "empty"))
+  df[[paste0(v, "_dietcons_union")]]      <- pmap_chr(df[ccols], ~ cons_union(..1, ..2, ..3))
+  df[[paste0(v, "_dietcons_intersection")]] <- pmap_chr(df[ccols], ~ cons_intersection(..1, ..2, ..3))
+  #df[[paste0(v, "_cons_thr3")]]       <- pmap_chr(df[ccols], ~ cons_threshold(..1, ..2, ..3, threshold = 3, fallback = "empty"))
+}
+
+# remove old consensus columns
+old_cons_cols <- c("prem_offer_dietcons", "marketing_str_dietcons", "who_cat_dietcons", "who_cat_clean_dietcons")
+old_cons_cols <- old_cons_cols[old_cons_cols %in% names(df)]
+df <- df %>% select(-all_of(old_cons_cols))
+
+# ---- quantify how often the original fallback would trigger (threshold=2, fallback=union) ----
+fallback_summary <- map_dfr(multi_label_vars, function(v) {
+  ccols <- paste0(v, "_diet", 1:3)
+  stopifnot(all(ccols %in% names(df)))
+  
+  # fallback is used when threshold set is empty BUT union is non-empty
+  used_fallback <- pmap_lgl(df[ccols], function(...) {
+    vals <- list(...)
+    sets <- lapply(vals, split_set)
+    
+    all_labels <- unlist(sets, use.names = FALSE)
+    if (length(all_labels) == 0) return(FALSE)
+    
+    tab <- table(all_labels)
+    thr <- names(tab)[tab >= 2]
+    
+    (length(thr) == 0) && (length(Reduce(union, sets)) > 0)
+  })
+  
+  tibble(
+    question = v,
+    n = length(used_fallback),
+    n_fallback = sum(used_fallback),
+    pct_fallback = mean(used_fallback)
+  )
+})
+
+
+write_xlsx(
+  list(
+    responses_diet_final_sens = df,
+    fallback_rates = fallback_summary
+  ), file.path(root_folder, "dieticians_all_sensitivity.xlsx")
+)
+
+
 
 
 

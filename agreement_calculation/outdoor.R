@@ -4,7 +4,7 @@ library(writexl)
 
 source("C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/agreement_calculation/agreement_functions.R")
 
-root_folder <- "C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/data/outdoor ads/"
+root_folder <- "C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/data/"
 plot_folder <- paste(root_folder, "plots/", sep="")
 responses_diet_all <- read_excel(paste(root_folder, "dieticians_outdoor_all_final.xlsx", sep="")) %>%
   mutate(img_id = gsub("\\.jpg$", "", img_id)) %>% arrange(img_id)

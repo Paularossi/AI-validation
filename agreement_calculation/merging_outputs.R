@@ -671,7 +671,7 @@ write_xlsx(responses_human_all, paste(root_folder, "responses_human_final.xlsx",
 # This provides a lower bound on consensus strictness.
 
 split_set <- function(x) {
-  # Treat "-", "", NA as empty set, otherwise split by comma
+  # treat "-", "", NA as empty set, otherwise split by comma
   if (is.null(x) || is.na(x)) return(character(0))
   x <- trimws(as.character(x))
   if (x == "" || x == "-" ) return(character(0))
@@ -715,7 +715,6 @@ cons_threshold <- function(a, b, c, threshold = 2, fallback = c("union", "empty"
 }
 
 df <- responses_wide_all
-df <- df %>% select(-all_of(old_cons_cols)) <- c("prem_offer", "marketing_str", "who_cat", "who_cat_clean")
 
 # ---- create new consensus columns ----
 for (v in multi_label_vars) {
