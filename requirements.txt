@@ -1,8 +1,8 @@
 accelerate==1.5.2
 einops==0.8.1
+flash_attn==2.8.3
 mistralai==1.5.1
 numpy==1.26.1
-ollama==0.4.7
 openai==1.66.3
 openpyxl==3.1.5
 pandas==2.1.1
@@ -10,5 +10,4 @@ pillow==10.1.0
 qwen_vl_utils==0.0.10
 requests==2.31.0
 timm==1.0.15
-torch==2.6.0
-torchvision==0.21.0
+transformers==4.57.6

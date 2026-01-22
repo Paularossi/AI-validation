@@ -9,21 +9,27 @@ import pandas as pd
 import torch
 from PIL import Image
 
-#from huggingface_hub import login
-#from transformers import AutoModelForImageTextToText, Gemma3ForConditionalGeneration, AutoProcessor, LlavaForConditionalGeneration, AutoModelForCausalLM, Qwen2_5_VLForConditionalGeneration
-#from qwen_vl_utils import process_vision_info
+from huggingface_hub import login
+from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration, Gemma3ForConditionalGeneration
+from qwen_vl_utils import process_vision_info
+
+import torchvision
+torchvision.disable_beta_transforms_warning() # disable warnings
 
 from labeling_validation.WHO_questions import *
+# if run through a gpu script, use labeling_validation.WHO_questions
+# if run locally use persistent.AI_validation.labeling_validation.WHO_questions
 
-# run this file in the terminal with `nohup python3 -m persistent.AI_validation.labeling_validation.classification`
+# run this file in the terminal with `nohup python3 -m labeling_validation.classification`
 
 # use the GPU if available
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
-torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+torch_dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+print(f"using {device} and {torch_dtype}")
 
-TEXT_MODELS = ["google/gemma-3-12b-it"]
-MULTIMODAL_MODELS = "Qwen/Qwen2.5-VL-32B-Instruct"
-API_MODELS = ["gpt-4o", "pixtral-12b-2409", "deepseek/deepseek-chat-v3-0324:free", "meta-llama/llama-3.2-11b-vision-instruct:free"]
+TEXT_MODELS = ["google/gemma-3-12b-it", "google/gemma-3-4b-it"] # or the bigger one google/gemma-3-27b-it
+MULTIMODAL_MODELS = ["Qwen/Qwen2.5-VL-32B-Instruct"]
+API_MODELS = ["gpt-4o", "pixtral-12b-2409"]
 
 # to find out if the models are reasoning models, check:
 # Benchmark evaluations on reasoning tasks (e.g., GSM8K, ARC, BIG-Bench, MMLU, CommonsenseQA)
@@ -35,7 +41,7 @@ all_questions = [alcohol, type_ad, marketing_str, premium_offer, who_cat, target
 expected_labels = [label for section in all_questions for (label, _) in section] + ['SPECULATION_LEVEL'] # all question labels
 
 #image_folder = "data/1000_images" # all the images
-image_folder = "data/outdoor ads/100 ads" # outdoor ads
+image_folder = "data/outdoor 100 ads" # outdoor ads
 images = [file for file in os.listdir(image_folder) if file.lower().endswith(('.jpg', '.jpeg', '.png'))]
 
 # read the keys
@@ -59,17 +65,11 @@ mistral_model_id = "pixtral-12b-2409"
 mistral_api_url = "https://api.mistral.ai/v1/chat/completions"
 mistral_api_key = json_data["mistralai"]
 
-# === DeepSeek ===
-deepseek_model_id = "deepseek/deepseek-chat-v3-0324:free"
-llama_model_id = "meta-llama/llama-3.2-11b-vision-instruct:free"
-
-openrouter_api_url = "https://openrouter.ai/api/v1/chat/completions"
-openrouter_api_key = json_data["deepseek"]
-
 
 def encode_image(image_path):
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
+
 
 # for mistral ai and gpt-4o
 def start_classification_apis(model_id, api_key, api_url, image_path, outdoor, ad_creative_bodies = None, page_name = None):
@@ -125,28 +125,22 @@ def start_classification_apis(model_id, api_key, api_url, image_path, outdoor, a
     response = requests.post(api_url, headers = headers, json = payload)
     end_time = time.time() 
     response_time = end_time - start_time
-    print(f"Time taken to generate response: {response_time:.2f} seconds") # 18 seconds with gpu
-    print(f"CUDA memory: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+    print(f"Time taken to generate response: {response_time:.2f} seconds") 
 
-    torch.cuda.empty_cache() # free unused memory
-    print(response.json()) # for gpt-4o, this format doesn't work!!!! change the instructions?
-
-    #print(f"Done classifying using model {model_id}!!! YAYYYY !!!!")
+    print(response.json())
 
     return response, response_time
 
 
 
 # =============== Transformers ===============
-#login(hugg_key) # log into hugging face (gated models)
-
 def initiate_transformers_model(model_id):
     """Load the right model and processor based on model_id."""
     # available models
     MODEL_MAP = { # try bigger
-        "google/gemma-3-12b-it": Gemma3ForConditionalGeneration, # Gemma3 - https://huggingface.co/google/gemma-3-12b-it
+        "google/gemma-3-12b-it": Gemma3ForConditionalGeneration, # Gemma3 - https://huggingface.co/google/gemma-3-12b-it,
+        "google/gemma-3-4b-it": Gemma3ForConditionalGeneration, # Gemma3 - https://huggingface.co/google/gemma-3-4b-it
         "Qwen/Qwen2.5-VL-32B-Instruct": Qwen2_5_VLForConditionalGeneration, # Qwen - https://huggingface.co/Qwen/Qwen2.5-VL-32B-Instruct
-        "CohereForAI/aya-vision-32b": AutoModelForImageTextToText # Aya Vision - https://huggingface.co/CohereForAI/aya-vision-32b
     }
 
     if model_id not in MODEL_MAP:
@@ -154,27 +148,32 @@ def initiate_transformers_model(model_id):
         return None, None
 
     # initiate the right model
-    model = MODEL_MAP[model_id].from_pretrained(model_id, device_map="auto", trust_remote_code=True).eval() # use .eval() to switch to evaluation (inference) mode
-    processor = AutoProcessor.from_pretrained(model_id, trust_remote_code = True)
+    model = MODEL_MAP[model_id].from_pretrained(model_id, device_map="auto", torch_dtype=torch.bfloat16, trust_remote_code=True, 
+                                                attn_implementation="flash_attention_2", max_memory={0: "70GiB", "cpu": "200GiB"}).eval() # use .eval() to switch to evaluation (inference) mode
+    processor = AutoProcessor.from_pretrained(model_id, trust_remote_code = True, use_fast = True)
+    # https://discuss.vllm.ai/t/what-means-using-a-slow-image-processor/1607
     
     print(f"Successfully loaded model and processor with id {model_id}.")
     return model, processor
 
 
-def start_classification_trns(model, processor, model_id, image_path, ad_creative_bodies, page_name):
+def start_classification_trns(model, processor, model_id, image_path, outdoor, ad_creative_bodies = None, page_name = None):
 
     print(f'======== Labeling image: {image_path}. ========\n')
 
     base64_image = encode_image(image_path) # for gemma
     # load the instructions and questions
     messages = [{"role": "system", "content": [{"type": "text", "text": instructions_new}]}]
-    user_content = create_user_content()
+    user_content = create_user_content(outdoor)
 
     # add other user content (page name, caption)
+    if not outdoor:
+        user_content.extend([
+            {"type": "text", "text": f"Name of the page running the ad: {page_name}"},
+            {"type": "text", "text": f"Ad caption: {ad_creative_bodies}"}
+        ])
+    
     user_content.extend([
-        {"type": "text", "text": f"Name of the page running the ad: {page_name}"},
-        {"type": "text", "text": f"Ad caption: {ad_creative_bodies}"},
-        #{"type": "image", "image": base64_image} # for qwen
         {"type": "image_url", "image_url": f"data:image/png;base64,{base64_image}"} # Gemma
             if model_id.startswith("google") else {"type": "image", "image": image_path} # aya (and qwen?)
     ])
@@ -185,8 +184,8 @@ def start_classification_trns(model, processor, model_id, image_path, ad_creativ
         inputs = processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=True,
             return_dict=True, return_tensors="pt" # pytorch tensor format output for gpu acceleration
-        ).to(model.device, dtype=torch.bfloat16) # bfloat16 instead of float16 for less memory consumption (best for inference)
-
+        )
+        inputs = {k: v.to(torch.device(device)) for k, v in inputs.items() if hasattr(v, "to")}
         input_len = inputs["input_ids"].shape[-1] # length of input prompt (to remove)
     
     elif model_id in MULTIMODAL_MODELS: # need separate processing for images
@@ -194,14 +193,14 @@ def start_classification_trns(model, processor, model_id, image_path, ad_creativ
         image_inputs, _ = process_vision_info(messages) # qwen requires separate image processing
         inputs = processor(
             text=[text_input], images=image_inputs, padding=True, return_tensors="pt"
-        ).to(model.device)
+        )
+        inputs = {k: v.to(torch.device(device)) for k, v in inputs.items() if hasattr(v, "to")}
         # use padding to make sure all inputs are the same length (pytorch can't create a tensor otherwise)
 
     start_time = time.time()
     # generate the response (regardless the model)
     with torch.inference_mode(): # optimize inference by disabling gradient calculations to save memory and speed up processing
-        generation = model.generate(**inputs, max_new_tokens=1300, do_sample=False, # deterministic generation (not random)
-            temperature = 0.1)
+        generation = model.generate(**inputs, max_new_tokens=1300, do_sample=False) # deterministic generation (not random), so temperature not needed
 
     end_time = time.time()
     response_time = end_time - start_time
@@ -213,7 +212,7 @@ def start_classification_trns(model, processor, model_id, image_path, ad_creativ
     # decode the response based on the ml being used
     if model_id in MULTIMODAL_MODELS:
         # Qwen requires trimming the input tokens before decoding
-        generated_ids_trimmed = [out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generation)]
+        generated_ids_trimmed = [out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.get("input_ids"), generation)] # inputs is now a dict, not a BatchEncoding
         response = processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         print(response) 
     else:
@@ -239,8 +238,6 @@ def label_images(images, captions, model_id, api_key=None, api_url=None, outdoor
     
     for image in images:
         image_path = os.path.join(image_folder, image)
-        #base64_image = encode_image(image_path)
-        #image_url = f"data:image/jpeg;base64,{base64_image}"
 
         ad_id = AD_PATTERN.findall(image)[0][0]
         if not outdoor:
@@ -261,9 +258,11 @@ def label_images(images, captions, model_id, api_key=None, api_url=None, outdoor
                 else:
                     response, response_time = start_classification_apis(model_id, api_key, api_url, image_path, outdoor, ad_creative_bodies, page_name)
                 response = response.json()['choices'][0]['message']['content']
-                #answer_dict = {match[0].strip(): (match[1].strip(), match[2].strip()) for match in pattern_api.findall(answers)}
             else:  # if it's a local transformer model
-                response, response_time = start_classification_trns(model, processor, model_id, image_path, ad_creative_bodies, page_name)
+                if outdoor:
+                    response, response_time = start_classification_trns(model, processor, model_id, image_path, outdoor)
+                else:
+                    response, response_time = start_classification_trns(model, processor, model_id, image_path, outdoor, ad_creative_bodies, page_name)
             
             responses.append(response)
 
@@ -273,6 +272,7 @@ def label_images(images, captions, model_id, api_key=None, api_url=None, outdoor
         except Exception as e:
             print(f"Error processing image {image} due to: {e}.")
             dict_entry = {"img_id": ad_id}
+            print(torch.cuda.memory_summary())
     
         results.append(dict_entry)
         print(f"===== Image {n} out of {len(images)} classified! =====")
@@ -292,7 +292,7 @@ def label_images(images, captions, model_id, api_key=None, api_url=None, outdoor
 
 # start from here
 # read the ads data
-ads_data = pd.read_excel("data/outdoor ads/dieticians_outdoor_all_wide.xlsx")
+ads_data = pd.read_excel("data/dieticians_outdoor_all_final.xlsx")
 #coded_ads2 = pd.read_excel("validation results/gpu/pixtral_20250501_130435.xlsx")
 #coded_ads = pd.read_excel("gpu outputs/pixtral_all_1000.xlsx")
 
@@ -304,28 +304,21 @@ ads_data = pd.read_excel("data/outdoor ads/dieticians_outdoor_all_wide.xlsx")
 
 #uncoded_images_sample = [img for img in images if img not in all_coded_images]
 # randomly sample
-uncoded_images = images[0:20]
+uncoded_images = images[70:]
 
 #img_names = [os.path.splitext(image)[0] for image in uncoded_images] # change all_image_ids to sampled_images
 #captions = ads_data[ads_data["img_id"].isin(img_names)][["img_id", "ad_creative_bodies", "page_name"]]
 ad_ids = ads_data[ads_data["img_id"].isin(uncoded_images)][["img_id"]] # for outdoor ads
 
-#labeling_outputs, responses = label_images(uncoded_images, captions, model_id=llama_model_id, api_key=openrouter_api_key, api_url=openrouter_api_url)
-labeling_outputs, responses = label_images(uncoded_images, ad_ids, model_id=mistral_model_id, api_key=mistral_api_key, api_url=mistral_api_url, outdoor=True)
-#labeling_outputs, responses = label_images(uncoded_images, captions, model_id=TEXT_MODELS[0])
+login(hugg_key) # log into hugging face (gated models)
+
+#labeling_outputs, responses = label_images(uncoded_images, ad_ids, model_id=mistral_model_id, api_key=mistral_api_key, api_url=mistral_api_url, outdoor=True)
+torch.cuda.empty_cache()
+torch.cuda.ipc_collect()
+labeling_outputs, responses = label_images(uncoded_images, ad_ids, model_id=MULTIMODAL_MODELS[0], outdoor=True)
 
 from datetime import datetime
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") # for the filename
-filename = f"pixtral_{timestamp}.xlsx"
-labeling_outputs.to_excel(f"data/outdoor ads/ais/{filename}", index=False)
-
-
-# best models
-# 1. GPT-4o (18 sec) 
-# 2. Qwen2.5 32b (~30 mins), 72b (71 minutes)
-# 3. MistralAI via API, 12b (14 sec)
-# 4. Gemma3 12b (29 mins), 27b (30 mins)
-
-# other models: OmniParser-v2.0
-# designed to be able to convert unstructured screenshot image into structured list of elements including interactable regions location and captions of icons on its potential functionality.
+filename = f"qwen_{timestamp}.xlsx"
+labeling_outputs.to_excel(f"data/outdoor/{filename}", index=False)
 
