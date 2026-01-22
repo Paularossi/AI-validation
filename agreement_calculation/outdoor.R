@@ -5,15 +5,19 @@ library(writexl)
 source("C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/agreement_calculation/agreement_functions.R")
 
 root_folder <- "C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/data/"
-plot_folder <- paste(root_folder, "plots/", sep="")
+plot_folder <- "C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/plots/"
 responses_diet_all <- read_excel(paste(root_folder, "dieticians_outdoor_all_final.xlsx", sep="")) %>%
   mutate(img_id = gsub("\\.jpg$", "", img_id)) %>% arrange(img_id)
 gpt <- read_excel(paste(root_folder, "gpt_all_outdoor.xlsx", sep="")) %>% arrange(img_id)
+qwen <- read_excel(paste(root_folder, "qwen_all_outdoor.xlsx", sep="")) %>% arrange(img_id)
 
 gpt <- gpt %>%
   mutate(brand = map_chr(brand, clean_brand))
 
-models <- list(GPT = gpt)
+qwen <- qwen %>%
+  mutate(brand = map_chr(brand, clean_brand))
+
+models <- list(GPT = gpt, Qwen = qwen)
 
 
 # ===== SINGLE CHOICE =====
@@ -66,7 +70,7 @@ plot_df_symmetric %>%
     panel.spacing = unit(0.5, "lines")
   )
 
-ggsave(paste(root_folder, "plots/everything_single_out.jpg", sep=""), width = 8, height = 5)
+ggsave(paste(plot_folder, "everything_single_out.jpg", sep=""), width = 8, height = 5)
 
 
 
@@ -119,105 +123,25 @@ ggplot(plot_df_sym, aes(x = rater1, y = rater2, fill = value)) +
     panel.spacing = unit(0.5, "lines")
   )
 
-ggsave(paste(root_folder, "plots/everything_multiple.jpg", sep=""), width = 8, height = 5)
-
-
-
-# ===== ANALYSIS BY LABELS =====
-# by label for single columns 
-disagreed_by_label_single <- lapply(single_choice_vars, function(col) {
-  df <- single_disagreement_by_label(models = models, column = col, dieticians = responses_diet_all)
-  df$question <- col
-  df
-}) %>% bind_rows()
-
-# 1. which labels are most missed overall? (pct_all_failed) - ambiguity in visual/textual cues.
-# 2. which model misses more?
-
-plot_df <- disagreed_by_label_single %>%
-  left_join(label_df, by = join_by(label == code, question == category)) %>%
-  filter(question == "new_type_ad") %>%
-  select(total, text_label, starts_with("failed_")) %>%
-  pivot_longer(
-    cols = starts_with("failed_"),
-    names_to = c("model", ".value"),
-    names_pattern = "failed_(.*)_(n|pct)"
-  ) %>%
-  mutate(text_label_n = paste0(text_label, " (", total, ")")) %>%
-  filter(model %!in% c("all_n", "all_pct"))
-
-plot_df %>%
-  filter(model != "All Models") %>%
-  ggplot(aes(x = model, y = reorder(text_label_n, -pct), fill = pct)) +
-    geom_tile(color = "white") +
-    geom_text(aes(label = paste(round(pct, 2), " (", n, ")", sep="")), size = 4) +
-    scale_fill_gradient2(
-      low = "darkgreen", mid = "yellow", high = "red", midpoint = 0.5, limits = c(0, 1))+
-    labs(title = "Missed Consensus Labels by Model and Label (Ad Type)",
-         x = "Model", y = "Label Code", fill = "% Missed") +
-    theme_minimal()
-
-ggsave(paste(root_folder, "plots/ai_missed_ad_type_out.png", sep=""), width = 10, height = 6)
-
-
-# by label for multi-label
-disagreed_by_label_multiple <- lapply(multi_label_vars, function(col) {
-  df <- multi_disagreement_by_label(models = models, column = col, dieticians = responses_diet_all)
-  df$question <- col
-  df
-}) %>% bind_rows()
-
-
-plot_df <- disagreed_by_label_multiple %>%
-  left_join(label_df, by = join_by(label == code, question == category)) %>%
-  filter(question == "who_cat_clean") %>%
-  select(total, text_label, starts_with("failed_")) %>%
-  pivot_longer(
-    cols = starts_with("failed_"),
-    names_to = c("model", ".value"),
-    names_pattern = "failed_(.*)_(n|pct)"
-  ) %>%
-  mutate(
-    text_label_n = paste0(text_label, " (", total, ")")
-  )
-
-
-plot_df %>%
-  filter(model != "All Models") %>%
-  ggplot(aes(x = model, y = reorder(text_label_n, -pct), fill = pct)) +
-    geom_tile(color = "white") +
-    geom_text(aes(label = paste(round(pct, 2), " (", n, ")", sep="")), size = 4) +
-    scale_fill_gradient2(
-      low = "darkgreen", mid = "yellow", high = "red", midpoint = 0.5, limits = c(0, 1))+
-    labs(title = "Missed Consensus Labels by Model and Label (WHO Categories)",
-         x = "Model", y = "Label Code", fill = "% Missed") +
-    theme_minimal()
-
-
-ggsave(paste(root_folder, "plots/ai_missed_who_cat_out.png", sep=""), width = 8, height = 6)
-
+ggsave(paste(plot_folder, "everything_multiple.jpg", sep=""), width = 8, height = 5)
 
 
 
 # ===== ANALYZE THE BRAND QUESTION =====
 df_brand <- responses_diet_all %>%
   select(c(img_id, brand_diet1, brand_diet2, brand_diet3)) %>%
-  #left_join(gpt[, c("img_id", "brand")], by = "img_id") %>%
   mutate(
     brand_diet1 = map_chr(brand_diet1, clean_brand),
     brand_diet2 = map_chr(brand_diet2, clean_brand),
     brand_diet3 = map_chr(brand_diet3, clean_brand),
   )
 
-# multi_label_consensus and multi_label_consensus_majority are from merging_outputs.R
+# cons_threshold from merging_outputs.R
 diet_cols <- paste0("brand_diet", 1:3)
-#consensus_col <- paste0("brand", "_dietcons")
-#df_brand[[consensus_col]] <- pmap_chr(df_brand[diet_cols], multi_label_consensus)
-
 df_brand <-  df_brand %>%
   mutate(brand_dietcons = pmap_chr(
     list(brand_diet1, brand_diet2, brand_diet3),
-    ~ multi_label_consensus_majority(..1, ..2, ..3, threshold = 2)
+    ~ cons_threshold(..1, ..2, ..3, threshold = 2, fallback = "union")
     )
   )
 
@@ -270,113 +194,199 @@ ggplot(plot_df_sym, aes(x = rater1, y = rater2, fill = value)) +
     panel.spacing = unit(0.5, "lines")
   )
 
-ggsave(paste(root_folder, "plots/brand.jpg", sep=""), width = 6, height = 5)
+ggsave(paste(plot_folder, "brand.jpg", sep=""), width = 6, height = 5)
 
 # ======== OPTION BIAS WITHIN EACH QUESTION (z-tests) + LABEL-LEVEL FIXED EFFECTS REGRESSION ========
-source("C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/agreement_calculation/agreement_functions.R")
+#source("C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/agreement_calculation/agreement_functions.R")
 source("C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/agreement_calculation/monte_regr.R")
 library(patchwork)
 # compute and plot option bias for all questions
-for (q in c(single_choice_vars, multi_label_vars)) {
-  q_label <- get_question_label(q)
-  print(paste("Calculating option bias for question:", q_label))
-  bt <- compute_option_bias(q, models, responses_diet_all)
-  fe_result <- label_fe_regression(q, models, responses_diet_all, outdoor = TRUE)
-  
-  # get FE result data first to align label ordering
-  fe_heatmap_result <- plot_label_fe_heatmap(fe_result, save = FALSE, outdoor = TRUE)
-  fe_data <- fe_heatmap_result$data
-  
-  # get the exact label order from FE heatmap (which includes reference at top)
-  fe_label_levels <- levels(fe_data$label_name)
-  
-  # get reference label info
-  ref_label_code <- get_reference_level(q)
-  ref_label_name <- label_df %>%
-    filter(category == q, code == ref_label_code) %>%
-    pull(text_label)
-  
-  bt <- bt %>%
-    left_join(
-      label_df %>% # join with label names from label_df
-        filter(category == q) %>%
-        select(code, text_label),
-      by = c("label" = "code")
-    ) %>%
-    mutate(sig = case_when(
-      is.na(p.value) ~ "",
-      p.value < 0.001 ~ "***",
-      p.value < 0.01 ~ "**",
-      p.value < 0.05 ~ "*",
-      TRUE ~ ""
-      ),
-      # use text_label if available, otherwise use code
-      label_name = ifelse(is.na(text_label), label, text_label))
-  
-  expected_labels <- label_df %>%
-    filter(category == fe_result$question) %>%
-    pull(text_label)
-  missing_labels <- if (fe_result$question == "alcohol") 0 else setdiff(expected_labels, unique(bt$label_name))
-  
-  # add missing labels with NA estimates
-  if (length(missing_labels) > 0) {
-    for (lbl in missing_labels) {
-      bt <- bt %>%
-        add_row(model = rep(unique(bt$model), each = 1),
-                label = lbl,
-                bias = NA,
-                p.value = NA,
-                sig = "",
-                label_name = lbl)
-    }
-  }
+bias_prem <- compute_option_bias("prem_offer", models, responses_diet_all) %>%
+  left_join(label_df %>% filter(category == "prem_offer") %>% select(code, text_label), by = c("label" = "code")) %>%
+  mutate(sig = case_when(
+    is.na(p.value) ~ "",
+    p.value < 0.001 ~ "***",
+    p.value < 0.01 ~ "**",
+    p.value < 0.05 ~ "*",
+    TRUE ~ ""
+  ),
+  # use text_label if available, otherwise use code
+  label_name = ifelse(is.na(text_label), label, text_label))
 
-  # use the same y-axis ordering as FE heatmap for alignment
-  bt <- bt %>%
-    mutate(label_name = factor(label_name, levels = fe_label_levels))
+bias_market <- compute_option_bias("marketing_str", models, responses_diet_all) %>%
+  left_join(label_df %>% filter(category == "marketing_str") %>% select(code, text_label), by = c("label" = "code")) %>%
+  mutate(sig = case_when(
+    is.na(p.value) ~ "",
+    p.value < 0.001 ~ "***",
+    p.value < 0.01 ~ "**",
+    p.value < 0.05 ~ "*",
+    TRUE ~ ""
+  ),
+  # use text_label if available, otherwise use code
+  label_name = ifelse(is.na(text_label), label, text_label))
 
-  # calculate combined range for both plots to ensure same legend
-  all_values <- c(bt$bias, fe_data$estimate)
-  value_range <- range(all_values, na.rm = TRUE)
+bias_who <- compute_option_bias("who_cat_clean", models, responses_diet_all) %>%
+  left_join(label_df %>% filter(category == "who_cat_clean") %>% select(code, text_label), by = c("label" = "code")) %>%
+  mutate(sig = case_when(
+    is.na(p.value) ~ "",
+    p.value < 0.001 ~ "***",
+    p.value < 0.01 ~ "**",
+    p.value < 0.05 ~ "*",
+    TRUE ~ ""
+  ),
+  # use text_label if available, otherwise use code
+  label_name = ifelse(is.na(text_label), label, text_label))
 
-  p1 <- ggplot(bt, aes(x = model, y = label_name, fill = bias)) +
-    geom_tile(color = "white") +
-    geom_text(aes(label = paste0(sprintf("%.2f", bias), sig)), color = "black", size = 3) +
-    scale_fill_gradient2(low = "#d73027", mid = "white", high = "red",
-                         midpoint = 0, name = "Bias",
-                         limits = value_range) +
-    labs(subtitle = "Option bias (z-test)",
-         x = "Model", y = "Label") +
-    theme_minimal() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
-          axis.text.y = element_text(size = 8))
+# collect the full range of bias
+all_values <- c(bias_market$bias, bias_prem$bias, bias_who$bias)
+value_range <- range(all_values, na.rm = TRUE)
 
-  p2 <- fe_heatmap_result$plot +
-    labs(subtitle = paste("FE regression (relative to reference: ", ref_label_name, ")", sep = ""),
-         title = NULL, x = "Model", y = NULL) +
-    scale_fill_gradient2(low = "#d73027", mid = "white", high = "red",
-                         midpoint = 0, name = "Bias",
-                         limits = value_range) +
-    theme(axis.text.y = element_blank(),
-          axis.ticks.y = element_blank(),
-          axis.title.y = element_blank())
-  
-  combined <- (p1 | p2) +
-    plot_layout(widths = c(1.2, 1), guides = "collect") +
-    plot_annotation(
-      title = paste("Label-level bias:", get_question_label(q)),
-      tag_levels = 'A'
-    ) &
-    theme(plot.tag = element_text(face = 'bold', size = 10),
-          legend.position = "right")
+# create individual plots
+p1_prem <- ggplot(bias_prem, aes(x = model, y = label_name, fill = bias)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = paste0(sprintf("%.2f", bias), sig)), color = "black", size = 2.5) +
+  scale_fill_gradient2(low = "#d73027", mid = "white", high = "red",
+                       midpoint = 0, name = "Bias", limits = value_range) +
+  labs(subtitle = "Premium Offers",
+       x = "Model", y = "Label") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+        axis.text.y = element_text(size = 7))
 
-  fn_combined <- paste0("bias_", q, "_out.jpg")
-  # custom size for who_cat_clean
-  sizes <- if (q %in% c("who_cat_clean")) {
-    list(width = 7, height = 5)
-  } else {
-    list(width = 6, height = 3)
-  }
-  ggsave(paste(plot_folder, fn_combined, sep = ""), plot = combined, width = sizes$width, height = sizes$height, dpi = 350)
-  #readr::write_csv(bt, paste0("option_bias_", q, ".csv"))
-}
+p2_market <- ggplot(bias_market, aes(x = model, y = label_name, fill = bias)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = paste0(sprintf("%.2f", bias), sig)), color = "black", size = 2.5) +
+  scale_fill_gradient2(low = "#d73027", mid = "white", high = "red",
+                       midpoint = 0, name = "Bias", limits = value_range) +
+  labs(subtitle = "Marketing Strategies",
+       x = "Model", y = "Label") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+        axis.text.y = element_text(size = 7))
+
+p3_who <- ggplot(bias_who, aes(x = model, y = label_name, fill = bias)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = paste0(sprintf("%.2f", bias), sig)), color = "black", size = 2.5) +
+  scale_fill_gradient2(low = "#d73027", mid = "white", high = "red",
+                       midpoint = 0, name = "Bias", limits = value_range) +
+  labs(subtitle = "WHO Food Categories", x = "Model", y = "Label") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+        axis.text.y = element_text(size = 7))
+
+# combine plots with proper layout and single legend
+combined_bias_plot <- (p1_prem + p2_market + p3_who) +
+  plot_layout(widths = c(1, 1, 1.5), guides = "collect") +
+  plot_annotation(
+    title = "Label-level bias (z-test) across multi-option question categories",
+    tag_levels = 'A'
+  ) &
+  theme(plot.tag = element_text(face = 'bold', size = 10),
+        legend.position = "right")
+
+ggsave(paste(plot_folder, "bias_combined_multi_out.jpg", sep = ""), plot = combined_bias_plot, width = 10, height = 5, dpi = 350)
+
+
+bias_alc <- compute_option_bias("alcohol", models, responses_diet_all) %>%
+  left_join(label_df %>% filter(category == "alcohol") %>% select(code, text_label), by = c("label" = "code")) %>%
+  mutate(sig = case_when(
+    is.na(p.value) ~ "",
+    p.value < 0.001 ~ "***",
+    p.value < 0.01 ~ "**",
+    p.value < 0.05 ~ "*",
+    TRUE ~ ""
+  ),
+  # use text_label if available, otherwise use code
+  label_name = ifelse(is.na(text_label), label, text_label))
+
+bias_targ <- compute_option_bias("target_group", models, responses_diet_all) %>%
+  left_join(label_df %>% filter(category == "target_group") %>% select(code, text_label), by = c("label" = "code")) %>%
+  mutate(sig = case_when(
+    is.na(p.value) ~ "",
+    p.value < 0.001 ~ "***",
+    p.value < 0.01 ~ "**",
+    p.value < 0.05 ~ "*",
+    TRUE ~ ""
+  ),
+  # use text_label if available, otherwise use code
+  label_name = ifelse(is.na(text_label), label, text_label))
+
+bias_type <- compute_option_bias("new_type_ad", models, responses_diet_all) %>%
+  left_join(label_df %>% filter(category == "new_type_ad") %>% select(code, text_label), by = c("label" = "code")) %>%
+  mutate(sig = case_when(
+    is.na(p.value) ~ "",
+    p.value < 0.001 ~ "***",
+    p.value < 0.01 ~ "**",
+    p.value < 0.05 ~ "*",
+    TRUE ~ ""
+  ),
+  # use text_label if available, otherwise use code
+  label_name = ifelse(is.na(text_label), label, text_label))
+
+# collect the full range of bias
+all_values <- c(bias_alc$bias, bias_targ$bias, bias_type$bias)
+value_range <- range(all_values, na.rm = TRUE)
+
+# create individual plots
+p1_alc <- ggplot(bias_alc, aes(x = model, y = label_name, fill = bias)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = paste0(sprintf("%.2f", bias), sig)), color = "black", size = 2.5) +
+  scale_fill_gradient2(low = "#d73027", mid = "white", high = "red",
+                       midpoint = 0, name = "Bias", limits = value_range) +
+  labs(subtitle = "Alcohol",
+       x = "Model", y = "Label") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+        axis.text.y = element_text(size = 7))
+
+p2_target <- ggplot(bias_targ, aes(x = model, y = label_name, fill = bias)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = paste0(sprintf("%.2f", bias), sig)), color = "black", size = 2.5) +
+  scale_fill_gradient2(low = "#d73027", mid = "white", high = "red",
+                       midpoint = 0, name = "Bias", limits = value_range) +
+  labs(subtitle = "Target Group",
+       x = "Model", y = "Label") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+        axis.text.y = element_text(size = 7))
+
+p3_type <- ggplot(bias_type, aes(x = model, y = label_name, fill = bias)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = paste0(sprintf("%.2f", bias), sig)), color = "black", size = 2.5) +
+  scale_fill_gradient2(low = "#d73027", mid = "white", high = "red",
+                       midpoint = 0, name = "Bias", limits = value_range) +
+  labs(subtitle = "Ad Type", x = "Model", y = "Label") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+        axis.text.y = element_text(size = 7))
+
+# combine plots with proper layout and single legend (vertical arrangement)
+combined_bias_plot <- (p1_alc / p2_target / p3_type) +
+  plot_layout(heights = c(0.5, 0.5, 1.5), guides = "collect") +
+  plot_annotation(
+    title = "Label-level bias (z-test) across single-option question categories",
+    tag_levels = 'A'
+  ) &
+  theme(plot.tag = element_text(face = 'bold', size = 10),
+        legend.position = "right")
+
+ggsave(paste(plot_folder, "bias_combined_single_out.jpg", sep = ""), plot = combined_bias_plot, width = 6, height = 7, dpi = 350)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

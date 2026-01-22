@@ -105,7 +105,7 @@ pixtral3 <- read_excel(paste(root_folder, "pixtral_20251230_170706.xlsx", sep=""
 pixtral_all <- bind_rows(pixtral1, pixtral2, pixtral3)
 sum(duplicated(pixtral_all$img_id)) # check for duplicates
 
-write_xlsx(pixtral_all, paste(root_folder, "pixtral_all.xlsx", sep=""))
+write_xlsx(pixtral_all, paste(root_folder, "pixtral_all_outdoor.xlsx", sep=""))
 sum(pixtral_all$response_time)/60
 
 
@@ -116,8 +116,18 @@ gemma3 <- read_excel(paste(root_folder, "gemma12_20260101_123641.xlsx", sep=""))
 gemma_all <- bind_rows(gemma1, gemma2, gemma3)
 sum(duplicated(gemma_all$img_id)) # check for duplicates
 
-write_xlsx(gemma_all, paste(root_folder, "gemma_temp.xlsx", sep=""))
-sum(gemma_all$response_time)/60
+write_xlsx(gemma_all, paste(root_folder, "gemma_all_outdoor.xlsx", sep=""))
+
+qwen1 <- read_excel(paste(root_folder, "qwen_20260122_141915.xlsx", sep=""))
+qwen2 <- read_excel(paste(root_folder, "qwen_20260122_151846.xlsx", sep=""))
+qwen3 <- read_excel(paste(root_folder, "qwen_20260122_160249.xlsx", sep=""))
+
+qwen_all <- bind_rows(qwen1, qwen2, qwen3)
+sum(duplicated(qwen_all$img_id)) # check for duplicates
+
+write_xlsx(qwen_all, paste(root_folder, "qwen_all_outdoor.xlsx", sep=""))
+
+#sum(pixtral$img_id %in% qwen_all$img_id)
 
 # =============================================================================
 # for ad distribution
@@ -272,9 +282,11 @@ write_xlsx(qwen, paste(root_folder, "qwen_all_1000.xlsx", sep=""))
 # outdoor
 gpt_all <- alcohol_changes(gpt_all)
 pixtral_all <- alcohol_changes(pixtral_all)
+qwen_all <- alcohol_changes(qwen_all)
 
 write_xlsx(pixtral_all, paste(root_folder, "pixtral_all_outdoor.xlsx", sep=""))
 write_xlsx(gpt_all, paste(root_folder, "gpt_all_outdoor.xlsx", sep=""))
+write_xlsx(qwen_all, paste(root_folder, "qwen_all_outdoor.xlsx", sep=""))
 
 # =============================================================================
 ### ===== PROCESSING THE SURVEY DATA =====

@@ -462,7 +462,6 @@ delta_all <- comparison_delta %>%
       select(question, rater1, rater2, delta = delta_masi, p_value)
   )
 
-# Install ggh4x if needed: install.packages("ggh4x")
 library(ggh4x)
 
 delta_all %>%
@@ -555,105 +554,7 @@ plot_combined_distributions(results_single, single_choice_vars, results_multi, m
 
 # ======== OPTION BIAS WITHIN EACH QUESTION (z-tests) + LABEL-LEVEL FIXED EFFECTS REGRESSION ========
 # quantify for each question and label how much each model over/under-selects an option relative to human consensus
-# panel: ad xd model x label, with label fixed effects that control for label difficulty)
 source("C:/Users/P70090005/OneDrive - Maastricht University/Desktop/phd/AI-validation/agreement_calculation/monte_regr.R")
-
-# compute and plot option bias for all questions
-for (q in c("new_type_ad", multi_label_vars)) {
-  q_label <- get_question_label(q)
-  print(paste("Calculating option bias for question:", q_label))
-
-  if (q %in% c("marketing_str", "prem_offer")) {
-    bt <- compute_option_bias(q, models, responses_human_all)
-    #fe_result <- label_fe_regression(q, models, responses_human_all)
-    # there is an intercept in the plm version with random effects (only for gpt now)
-  } else {
-    bt <- compute_option_bias(q, models, responses_dieticians)
-    #fe_result <- label_fe_regression(q, models, responses_dieticians)
-  }
-  
-  # get FE result data first to align label ordering
-  #fe_heatmap_result <- plot_label_fe_heatmap(fe_result, save = FALSE)
-  #fe_data <- fe_heatmap_result$data
-  
-  # get the exact label order from FE heatmap (which includes reference at top)
-  #fe_label_levels <- levels(fe_data$label_name)
-  
-  # get reference label info
-  ref_label_code <- get_reference_level(q)
-  ref_label_name <- label_df %>%
-    filter(category == q, code == ref_label_code) %>%
-    pull(text_label)
-
-  bt <- bt %>%
-    left_join(
-      label_df %>% # join with label names from label_df
-        filter(category == q) %>%
-        select(code, text_label),
-      by = c("label" = "code")
-    ) %>%
-    mutate(sig = case_when(
-      is.na(p.value) ~ "",
-      p.value < 0.001 ~ "***",
-      p.value < 0.01 ~ "**",
-      p.value < 0.05 ~ "*",
-      TRUE ~ ""
-      ),
-      # use text_label if available, otherwise use code
-      label_name = ifelse(is.na(text_label), label, text_label))
-
-
-  # use the same y-axis ordering as FE heatmap for alignment
-  # bt <- bt %>%
-  #  mutate(label_name = factor(label_name, levels = levels(fe_data$label_name)))
-
-  # calculate combined range for both plots to ensure same legend
-  #all_values <- c(bt$bias, fe_data$estimate)
-  #value_range <- range(all_values, na.rm = TRUE)
-
-  p1 <- ggplot(bt, aes(x = model, y = label_name, fill = bias)) +
-    geom_tile(color = "white") +
-    geom_text(aes(label = paste0(sprintf("%.2f", bias), sig)), color = "black", size = 3) +
-    scale_fill_gradient2(low = "#d73027", mid = "white", high = "red",
-                         midpoint = 0, name = "Bias",
-                         limits = range(bt$bias, na.rm = TRUE)) +
-    labs(subtitle = "Option bias (z-test)",
-         x = "Model", y = "Label") +
-    theme_minimal() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
-          axis.text.y = element_text(size = 8))
-
-  # p2 <- fe_heatmap_result$plot +
-  #   labs(subtitle = paste("FE regression (relative to reference: ", ref_label_name, ")", sep = ""),
-  #        title = NULL, x = "Model", y = NULL) +
-  #   scale_fill_gradient2(low = "#d73027", mid = "white", high = "red",
-  #                        midpoint = 0, name = "Bias",
-  #                        limits = value_range) +
-  #   theme(axis.text.y = element_blank(),
-  #         axis.ticks.y = element_blank(),
-  #         axis.title.y = element_blank())
-
-  # combined <- (p1 | p2) +
-  #   plot_layout(widths = c(1.2, 1), guides = "collect") +
-  #   plot_annotation(
-  #     title = paste("Label-level bias:", get_question_label(q)),
-  #     tag_levels = 'A'
-  #   ) &
-  #   theme(plot.tag = element_text(face = 'bold', size = 10),
-  #         legend.position = "right")
-
-  # fn_combined <- paste0("bias_", q, ".jpg")
-  # # custom size for who_cat_clean
-  # sizes <- if (q %in% c("who_cat_clean")) {
-  #   list(width = 8, height = 5)
-  # } else {
-  #   list(width = 5, height = 3)
-  # }
-  # ggsave(paste(plot_folder, fn_combined, sep = ""), plot = combined, width = sizes$width, height = sizes$height, dpi = 350)
-  #readr::write_csv(bt, paste0("option_bias_", q, ".csv"))
-}
-
-
 
 bias_prem <- compute_option_bias("prem_offer", models, responses_human_all) %>%
     left_join(label_df %>% filter(category == "prem_offer") %>% select(code, text_label), by = c("label" = "code")) %>%

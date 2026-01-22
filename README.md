@@ -7,33 +7,36 @@ This repository contains the data, complete codebase and analysis pipeline for a
 
 ```
 AI-validation/
-├── agreement_calculation/               # Agreement analysis
-│   ├── agreement_functions.R            # Core agreement metrics
-│   ├── human_ai_agreement.R             # Main analysis script
-│   ├── dieticians.R                     # Expert-specific analysis
-│   ├── monte_regr.R                     # Monte Carlo simulations
-│   └── outdoor.R                        # Outdoor ad analysis
+├── agreement_calculation/                   # Agreement analysis
+│   ├── agreement_functions.R                # Core agreement metrics (Gwet's AC, Jaccard, etc.)
+│   ├── consensus_sensitivity.R              # Sensitivity analysis of consensus rules (multi-option questions)
+│   ├── human_ai_agreement.R                 # Main analysis script
+│   ├── dieticians.R                         # Expert-specific analysis
+│   ├── merging_outputs.R                    # Various data processing functions (merging, consensus, etc.)
+│   ├── monte_regr.R                         # Monte Carlo simulation functions
+│   ├── simulation_multilabel_agreement.R    # Simulation for interpreting multi-label agreement
+│   └── outdoor.R                            # Outdoor ad analysis
 │
-├── data/                                # Core datasets and model outputs
-│   ├── ...
-│   ├── 1000 images/                     # Main image dataset
-│   └── outdoor 100 ads/                 # Outdoor advertising subset
+├── data/                                    # Core datasets and model outputs
+│   ├── ...                                  # Final datasets with all classifications (crowd, dieticians, models)
+│   ├── 1000 images/                         # Main image dataset
+│   └── outdoor 100 ads/                     # Outdoor advertising subset
 │
-├── labeling_validation/                 # AI labeling system
-│   ├── AI_labelling_new.py              # Main labeling script
-│   ├── classification.py                # Classification utilities
-│   ├── deduplication.py                 # Data deduplication
-│   ├── language_flagging.py             # Language detection
-|   └── WHO_questions.py                 # Question definitions and parsing
+├── labeling_validation/                     # AI labeling system
+│   ├── AI_labelling_new.py                  # Main labeling script
+│   ├── classification.py                    # Classification utilities
+│   ├── deduplication.py                     # Data deduplication
+│   ├── language_flagging.py                 # Language detection
+|   └── WHO_questions.py                     # Question definitions and parsing
 │
-├── plots/                               # Generated visualizations and results
-├── publication/                         # Publication materials
-│   └── Supplementary Material.docx      # Supplementary documentation
+├── plots/                                   # Generated visualizations and results (tables)
+├── publication/                             # Publication materials
+│   └── Supplementary Material.docx          # Supplementary documentation
 │
-├── .gitignore                           # Git ignore rules
-├── requirements.txt                     # Python dependencies
-├── install.sh, install2.sh              # Installation scripts for the GPU cluster (not necessary)
-└── README.md                            # This file
+├── .gitignore                               # Git ignore rules
+├── requirements.txt                         # Python dependencies
+├── install2.sh                              # Installation script for the GPU cluster (not necessary)
+└── README.md                                # This file
 
 
 ```
@@ -67,8 +70,9 @@ AI-validation/
    venv\Scripts\activate.bat
    ```
 
-3. **Install Python dependencies:**
+3. **Install Python dependencies (change your CUDA version):**
    ```bash
+   pip install "torch==2.10.0" "torchvision==0.25.0" --index-url https://download.pytorch.org/whl/cu128
    pip install -r requirements.txt
    ```
 
@@ -89,17 +93,12 @@ AI-validation/
 
 ### Agreement Metrics
 
-- **Single-choice Questions**: Cohen's Kappa, Gwet's AC1, Percentage Agreement
-- **Multi-label Questions**: Jaccard Similarity, Krippendorff's Alpha (MASI)
+- **Single-option Questions**: Gwet's AC1, Percentage Agreement
+- **Multi-option Questions**: Jaccard Similarity, Krippendorff's Alpha (MASI)
 - **Statistical Testing**: Z-tests for bias detection + FE regressions
 - **Bootstrap Analysis**: Monte Carlo simulations for confidence intervals
-
-### Bias Detection
-
-- **Label-level Analysis**: Systematic over/under-selection patterns
-- **Language Comparison**: Dutch vs. French advertisement differences  
-- **Category Stratification**: Agreement by product categories
-- **Fixed Effects Modeling**: Control for label difficulty
+- **Consensus Sensitivity**: Sensitivity analysis of alternative consensus rules (baseline thresholded union, empty-threshold, hard intersection, and full union)
+- **Multi-option Agreement Simulation**: Contextualization of agreement interpretation for multi-option questions
 
 ## 📈 Analysis Outputs
 
@@ -109,6 +108,7 @@ AI-validation/
 2. **Bias Analysis**: Label-level bias patterns by model
 3. **Language Comparisons**: Agreement differences between Dutch/French ads
 4. **Distribution Plots**: Bootstrap confidence intervals for agreement metrics
+5. **Consensus Rule Deltas**: Kripp. Alpha shifts when switching consensus aggregation rules (multi-option)
 
 ### Key Results Files (in `data/`)
 
@@ -117,12 +117,13 @@ AI-validation/
 - Outdoor analysis: `gpt_all_outdoor.xlsx`, `dieticians_outdoor_all_final.xlsx`
 - Agreement analyses: Generated during R script execution
 - Label mappings: `label_mappings.csv` with all category definitions
+- Multi-label simulation results: `multi_agreement_simulation_results.xlsx` (inside `plots`)
 
 ## 🏗️ Methodology
 
 ### Data Collection
 - **Image Dataset**: 1,000+ food/beverage advertisements from Belgium
-- **Human Validation**: Expert dieticians and crowdsourced human coders
+- **Human Validation**: Dieticians and crowdsourced human coders
 - **Multiple Languages**: Dutch and French advertisement content
 - **Ground Truth**: Consensus-based gold standard labels
 
